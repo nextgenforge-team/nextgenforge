@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NextGen Forge — WRO Robotics Team</title>
+<!--
+  ============================================================
+  NEXTGEN FORGE -- TEAM HOMEPAGE
+  ----------------------------------------------------------------------
+  A deliberately different look from the chatbot page: light
+  "engineering blueprint" theme (navy/cyan ink on paper) instead of
+  the dark ember theme used elsewhere, so this reads as the team's
+  front door rather than another product screen.
+
+  EDIT ME
+  ----------------------------------------------------------------------
+  - Team members: the .team-grid section below.
+  - The two destination links: search for "ROBOT_UI_URL" and
+    "CHATBOT_URL" near the top of <script> and change them there --
+    both the hero cards and the bottom CTA read from the same two
+    constants, so you only need to update a link once.
+  - Colors/fonts: CSS variables at the top of <style>.
+  ============================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f5f7fb;
+  --panel:#ffffff;
+  --ink:#0f1720;
+  --ink-dim:#4b5568;
+  --ink-faint:#8992a3;
+  --blue:#1e56d8;
+  --blue-deep:#0a2f70;
+  --cyan:#14b8c9;
+  --line:#d7deea;
+  --line-strong:#b7c2d6;
+  --grid: rgba(30,86,216,0.07);
+  --shadow: 0 18px 40px rgba(15,23,42,.08);
+  --radius: 14px;
+}
+*{ box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'IBM Plex Sans', system-ui, sans-serif;
+  line-height:1.55;
+}
+h1,h2,h3{ font-family:'Sora', sans-serif; margin:0; color:var(--ink); }
+a{ color:inherit; text-decoration:none; }
+.mono{ font-family:'IBM Plex Mono', monospace; }
+::selection{ background:color-mix(in srgb, var(--cyan) 30%, transparent); }
+:focus-visible{ outline:2.5px solid var(--blue); outline-offset:3px; }
+
+.wrap{ max-width:1120px; margin:0 auto; padding:0 24px; }
+
+/* subtle engineering grid backdrop across the whole page */
+body{
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+/* corner-bracket motif reused across hero art, cards, avatars */
+.bracketed{ position:relative; }
+.bracketed::before, .bracketed::after,
+.bracketed .bl, .bracketed .br{ content:''; position:absolute; width:16px; height:16px; border:2px solid var(--blue); opacity:.55; }
+.bracketed::before{ top:-1px; left:-1px; border-right:none; border-bottom:none; }
+.bracketed::after{ top:-1px; right:-1px; border-left:none; border-bottom:none; }
+.bracketed .bl{ bottom:-1px; left:-1px; border-right:none; border-top:none; }
+.bracketed .br{ bottom:-1px; right:-1px; border-left:none; border-top:none; }
+
+/* ---------- nav ---------- */
+.nav{
+  position:sticky; top:0; z-index:50; background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+}
+.nav .wrap{ display:flex; align-items:center; justify-content:space-between; padding-top:16px; padding-bottom:16px; }
+.brand{ display:flex; align-items:center; gap:10px; font-weight:700; font-size:17px; }
+.brand-mark{ width:26px; height:26px; flex:0 0 auto; }
+.brand small{ display:block; font-family:'IBM Plex Mono', monospace; font-weight:500; font-size:10.5px; letter-spacing:.06em; color:var(--ink-faint); text-transform:uppercase; }
+.nav-links{ display:flex; gap:26px; font-size:14px; font-weight:500; color:var(--ink-dim); }
+.nav-links a:hover{ color:var(--blue); }
+@media (max-width:640px){ .nav-links{ display:none; } }
+
+/* ---------- hero ---------- */
+.hero{ padding:64px 0 20px; position:relative; overflow:hidden; }
+.eyebrow{
+  font-family:'IBM Plex Mono', monospace; font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--blue); display:flex; align-items:center; gap:10px; margin-bottom:18px;
+}
+.eyebrow::before{ content:''; width:26px; height:1px; background:var(--blue); }
+.hero h1{ font-size:clamp(34px, 5.6vw, 58px); font-weight:800; letter-spacing:-.01em; max-width:16ch; }
+.hero h1 .accent{ color:var(--blue); }
+.hero p.lede{ margin-top:18px; max-width:56ch; font-size:17px; color:var(--ink-dim); }
+
+/* animated blueprint schematic behind the hero */
+.schematic{ position:absolute; top:-10px; right:-60px; width:440px; height:440px; opacity:.9; pointer-events:none; }
+@media (max-width:900px){ .schematic{ display:none; } }
+.schematic path, .schematic circle, .schematic line{
+  stroke:var(--blue-deep); fill:none; stroke-width:1.4;
+}
+.schematic .glow{ stroke:var(--cyan); }
+.draw{ stroke-dasharray:900; stroke-dashoffset:900; animation:drawIn 2.6s ease forwards; }
+.draw.delay1{ animation-delay:.2s; }
+.draw.delay2{ animation-delay:.5s; }
+@keyframes drawIn{ to{ stroke-dashoffset:0; } }
+.node{ fill:var(--cyan); animation:nodePulse 2.4s ease-in-out infinite; }
+@keyframes nodePulse{ 0%,100%{ opacity:.5; } 50%{ opacity:1; } }
+
+/* ---------- option cards (hero + bottom CTA share this) ---------- */
+.options{ display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-top:46px; position:relative; z-index:2; }
+@media (max-width:720px){ .options{ grid-template-columns:1fr; } }
+.opt-card{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:28px 26px; box-shadow:var(--shadow); position:relative;
+  transition:transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+  display:flex; flex-direction:column; gap:14px;
+}
+.opt-card:hover{ transform:translateY(-3px); border-color:var(--blue); box-shadow:0 22px 46px rgba(15,23,42,.12); }
+.opt-icon{ width:44px; height:44px; }
+.opt-card h3{ font-size:21px; }
+.opt-card p{ margin:0; color:var(--ink-dim); font-size:14.5px; }
+.opt-go{
+  margin-top:auto; display:inline-flex; align-items:center; gap:8px; font-family:'IBM Plex Mono', monospace;
+  font-size:12.5px; font-weight:600; color:var(--blue); letter-spacing:.03em; text-transform:uppercase;
+}
+.opt-go .arrow{ transition:transform .2s ease; }
+.opt-card:hover .opt-go .arrow{ transform:translateX(4px); }
+.opt-tag{
+  position:absolute; top:20px; right:20px; font-family:'IBM Plex Mono', monospace; font-size:10.5px;
+  color:var(--ink-faint); letter-spacing:.05em;
+}
+
+/* ---------- section shell ---------- */
+.section{ padding:88px 0; }
+.section-head{ margin-bottom:40px; max-width:60ch; }
+.section-head h2{ font-size:clamp(26px,3.4vw,36px); }
+.section-head p{ margin-top:12px; color:var(--ink-dim); font-size:15.5px; }
+.divider{ height:1px; background:var(--line); }
+
+/* ---------- about ---------- */
+.about-grid{ display:grid; grid-template-columns:1.1fr .9fr; gap:48px; align-items:start; }
+@media (max-width:820px){ .about-grid{ grid-template-columns:1fr; } }
+.about-copy p{ color:var(--ink-dim); font-size:15.5px; margin:0 0 16px; }
+.spec-sheet{
+  border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); padding:22px 24px;
+  box-shadow:var(--shadow);
+}
+.spec-row{ display:flex; justify-content:space-between; gap:16px; padding:11px 0; border-bottom:1px dashed var(--line); font-size:13.5px; }
+.spec-row:last-child{ border-bottom:none; }
+.spec-row .k{ font-family:'IBM Plex Mono', monospace; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.04em; font-size:11.5px; }
+.spec-row .v{ color:var(--ink); font-weight:500; text-align:right; }
+
+/* ---------- team ---------- */
+.team-grid{ display:grid; grid-template-columns:repeat(4, 1fr); gap:20px; }
+@media (max-width:900px){ .team-grid{ grid-template-columns:1fr 1fr; } }
+@media (max-width:520px){ .team-grid{ grid-template-columns:1fr; } }
+.team-card{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:26px 20px 22px; text-align:center; box-shadow:var(--shadow);
+  transition:transform .2s ease, border-color .2s ease;
+}
+.team-card:hover{ transform:translateY(-3px); border-color:var(--cyan); }
+.avatar{
+  width:64px; height:64px; margin:0 auto 16px; position:relative;
+  display:flex; align-items:center; justify-content:center;
+}
+.avatar svg{ width:100%; height:100%; }
+.avatar .initial{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-family:'Sora', sans-serif; font-weight:700; font-size:19px; color:var(--blue-deep);
+}
+.team-card h3{ font-size:17px; margin-bottom:4px; }
+.role-tag{
+  display:inline-block; font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--blue); background:color-mix(in srgb, var(--blue) 8%, transparent);
+  border:1px solid color-mix(in srgb, var(--blue) 30%, transparent); border-radius:20px; padding:4px 11px;
+}
+.team-card.mentor .role-tag{
+  color:var(--cyan); border-color:color-mix(in srgb, var(--cyan) 40%, transparent);
+  background:color-mix(in srgb, var(--cyan) 10%, transparent);
+}
+
+/* ---------- bottom CTA ---------- */
+.cta-section{ background:var(--panel); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.cta-head{ text-align:center; max-width:52ch; margin:0 auto 36px; }
+.cta-head h2{ font-size:clamp(24px,3vw,32px); }
+.cta-head p{ margin-top:10px; color:var(--ink-dim); }
+
+/* ---------- footer ---------- */
+footer{ padding:36px 0 48px; }
+footer .wrap{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
+footer .mono{ font-size:12px; color:var(--ink-faint); }
+
+/* ---------- scroll reveal ---------- */
+.reveal{ opacity:0; transform:translateY(16px); transition:opacity .6s ease, transform .6s ease; }
+.reveal.in{ opacity:1; transform:translateY(0); }
+@media (prefers-reduced-motion: reduce){
+  .reveal{ opacity:1; transform:none; transition:none; }
+  .draw{ stroke-dashoffset:0; animation:none; }
+  .node{ animation:none; opacity:.85; }
+  html{ scroll-behavior:auto; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="24" height="24" rx="5" stroke="#1e56d8" stroke-width="1.6"/>
+        <circle cx="13" cy="13" r="4.2" stroke="#14b8c9" stroke-width="1.6"/>
+        <line x1="13" y1="1" x2="13" y2="6.5" stroke="#1e56d8" stroke-width="1.6"/>
+        <line x1="13" y1="19.5" x2="13" y2="25" stroke="#1e56d8" stroke-width="1.6"/>
+      </svg>
+      <span>NextGen Forge<small>WRO Robotics Team</small></span>
+    </div>
+    <div class="nav-links">
+      <a href="#interfaces">Interfaces</a>
+      <a href="#about">About</a>
+      <a href="#team">Team</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero wrap" id="interfaces">
+  <svg class="schematic" viewBox="0 0 440 440" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <rect class="draw" x="140" y="60" width="160" height="130" rx="14"/>
+    <circle class="draw delay1" cx="180" cy="105" r="10"/>
+    <circle class="draw delay1" cx="260" cy="105" r="10"/>
+    <path class="draw delay2" d="M175 150 Q220 175 265 150"/>
+    <line class="draw" x1="220" y1="60" x2="220" y2="30"/>
+    <circle class="node" cx="220" cy="26" r="4"/>
+    <line class="draw delay1" x1="140" y1="120" x2="90" y2="120"/>
+    <circle class="node" cx="86" cy="120" r="4"/>
+    <line class="draw delay1" x1="300" y1="120" x2="350" y2="120"/>
+    <circle class="node" cx="354" cy="120" r="4"/>
+    <line class="draw delay2" x1="180" y1="190" x2="150" y2="260"/>
+    <line class="draw delay2" x1="260" y1="190" x2="290" y2="260"/>
+    <line class="draw delay2" x1="150" y1="260" x2="150" y2="300"/>
+    <line class="draw delay2" x1="290" y1="260" x2="290" y2="300"/>
+    <circle class="glow node" cx="150" cy="305" r="5"/>
+    <circle class="glow node" cx="290" cy="305" r="5"/>
+  </svg>
+
+  <div class="eyebrow">TEAM NEXTGEN FORGE · WRO ROBOTICS</div>
+  <h1>Two interfaces.<br><span class="accent">One robot.</span></h1>
+  <p class="lede">Meet Robo Sanskriti in person through its animated companion screen, or ask NextGen Forge anything through a search-style assistant — both built by our team for this year's WRO project.</p>
+
+  <div class="options">
+    <a class="opt-card bracketed" id="robotCard" href="#" target="_blank" rel="noopener">
+      <span class="bl"></span><span class="br"></span>
+      <span class="opt-tag mono">01</span>
+      <svg class="opt-icon" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="14" width="24" height="20" rx="5" stroke="#1e56d8" stroke-width="1.8"/>
+        <circle cx="17" cy="23" r="2.4" fill="#1e56d8"/>
+        <circle cx="27" cy="23" r="2.4" fill="#14b8c9"/>
+        <path d="M16 30q6 4 12 0" stroke="#1e56d8" stroke-width="1.8"/>
+        <line x1="22" y1="14" x2="22" y2="7" stroke="#1e56d8" stroke-width="1.8"/>
+        <circle cx="22" cy="5" r="2" fill="#14b8c9"/>
+      </svg>
+      <h3>Robot UI</h3>
+      <p>Step up to Robo Sanskriti's on-screen companion — animated greetings, spoken welcomes, and a tour through Indian culture, triggered the moment someone approaches.</p>
+      <span class="opt-go">Open Robot UI <span class="arrow">→</span></span>
+    </a>
+
+    <a class="opt-card bracketed" id="chatCard" href="#" target="_blank" rel="noopener">
+      <span class="bl"></span><span class="br"></span>
+      <span class="opt-tag mono">02</span>
+      <svg class="opt-icon" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="22" cy="20" r="13" stroke="#1e56d8" stroke-width="1.8"/>
+        <path d="M22 33v5l7-5" stroke="#1e56d8" stroke-width="1.8" stroke-linejoin="round"/>
+        <circle cx="16.5" cy="20" r="1.8" fill="#14b8c9"/>
+        <circle cx="22" cy="20" r="1.8" fill="#14b8c9"/>
+        <circle cx="27.5" cy="20" r="1.8" fill="#14b8c9"/>
+      </svg>
+      <h3>NextGen Forge</h3>
+      <p>Ask anything, typed or spoken — a search-style assistant tuned for quick answers and deep robotics know-how.</p>
+      <span class="opt-go">Open NextGen Forge <span class="arrow">→</span></span>
+    </a>
+  </div>
+</section>
+
+<section class="section reveal" id="about">
+  <div class="wrap about-grid">
+    <div class="about-copy">
+      <div class="eyebrow">ABOUT US</div>
+      <h2 style="margin-bottom:18px;">Built for World Robot Olympiad</h2>
+      <p>NextGen Forge is a student robotics team competing in the World Robot Olympiad (WRO). Our project pairs a physical robot — Robo Sanskriti — with a conversational assistant, exploring both sides of how people interact with a robot: an in-person, sensor-triggered greeting experience, and an open-ended question-and-answer interface.</p>
+      <p>Across both interfaces we focused on the same goals: approachable design, real spoken interaction, and enough flexibility that either piece can run standalone or connect to a live AI backend.</p>
+    </div>
+    <div class="spec-sheet bracketed">
+      <span class="bl"></span><span class="br"></span>
+      <div class="spec-row"><span class="k">Team</span><span class="v">NextGen Forge</span></div>
+      <div class="spec-row"><span class="k">Program</span><span class="v">World Robot Olympiad</span></div>
+      <div class="spec-row"><span class="k">Robot</span><span class="v">Robo Sanskriti</span></div>
+      <div class="spec-row"><span class="k">Assistant</span><span class="v">NextGen Forge Chat</span></div>
+      <div class="spec-row"><span class="k">Mentor</span><span class="v">Pooja M J</span></div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap"><div class="divider"></div></div>
+
+<section class="section reveal" id="team">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">THE TEAM</div>
+      <h2>The people behind the build</h2>
+      <p>Three team members and one mentor guiding the project from idea to competition-ready robot.</p>
+    </div>
+    <div class="team-grid">
+
+      <div class="team-card">
+        <div class="avatar">
+          <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="none" stroke="#1e56d8" stroke-width="1.6"/><circle cx="32" cy="32" r="22" fill="none" stroke="#d7deea" stroke-width="1"/></svg>
+          <span class="initial">M</span>
+        </div>
+        <h3>Matthew</h3>
+        <span class="role-tag">Team Member</span>
+      </div>
+
+      <div class="team-card">
+        <div class="avatar">
+          <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="none" stroke="#1e56d8" stroke-width="1.6"/><circle cx="32" cy="32" r="22" fill="none" stroke="#d7deea" stroke-width="1"/></svg>
+          <span class="initial">A</span>
+        </div>
+        <h3>Ansh</h3>
+        <span class="role-tag">Team Member</span>
+      </div>
+
+      <div class="team-card">
+        <div class="avatar">
+          <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="none" stroke="#1e56d8" stroke-width="1.6"/><circle cx="32" cy="32" r="22" fill="none" stroke="#d7deea" stroke-width="1"/></svg>
+          <span class="initial">D</span>
+        </div>
+        <h3>Dhan</h3>
+        <span class="role-tag">Team Member</span>
+      </div>
+
+      <div class="team-card mentor">
+        <div class="avatar">
+          <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="none" stroke="#14b8c9" stroke-width="1.6"/><circle cx="32" cy="32" r="22" fill="none" stroke="#d7deea" stroke-width="1"/></svg>
+          <span class="initial">P</span>
+        </div>
+        <h3>Pooja M J</h3>
+        <span class="role-tag">Mentor</span>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="cta-section reveal">
+  <div class="wrap" style="padding:64px 24px;">
+    <div class="cta-head">
+      <div class="eyebrow" style="justify-content:center;">READY TO EXPLORE?</div>
+      <h2>Pick an interface to try</h2>
+      <p>Same two destinations as above — pinned here so they're easy to find after scrolling through.</p>
+    </div>
+    <div class="options" style="margin-top:0;">
+      <a class="opt-card bracketed" id="robotCard2" href="#" target="_blank" rel="noopener">
+        <span class="bl"></span><span class="br"></span>
+        <span class="opt-tag mono">01</span>
+        <svg class="opt-icon" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="10" y="14" width="24" height="20" rx="5" stroke="#1e56d8" stroke-width="1.8"/>
+          <circle cx="17" cy="23" r="2.4" fill="#1e56d8"/>
+          <circle cx="27" cy="23" r="2.4" fill="#14b8c9"/>
+          <path d="M16 30q6 4 12 0" stroke="#1e56d8" stroke-width="1.8"/>
+        </svg>
+        <h3>Robot UI</h3>
+        <p>Open Robo Sanskriti's companion screen.</p>
+        <span class="opt-go">Open Robot UI <span class="arrow">→</span></span>
+      </a>
+      <a class="opt-card bracketed" id="chatCard2" href="#" target="_blank" rel="noopener">
+        <span class="bl"></span><span class="br"></span>
+        <span class="opt-tag mono">02</span>
+        <svg class="opt-icon" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="22" cy="20" r="13" stroke="#1e56d8" stroke-width="1.8"/>
+          <path d="M22 33v5l7-5" stroke="#1e56d8" stroke-width="1.8" stroke-linejoin="round"/>
+        </svg>
+        <h3>NextGen Forge</h3>
+        <p>Open the search-style chat assistant.</p>
+        <span class="opt-go">Open NextGen Forge <span class="arrow">→</span></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="mono">© NextGen Forge — WRO Robotics Team</span>
+    <span class="mono">Robo Sanskriti · NextGen Forge Chat</span>
+  </div>
+</footer>
+
+<script>
+/* ------------------------------------------------------------
+   Update these two lines if either page's URL changes -- every
+   link on this page (hero cards + bottom CTA) reads from here.
+------------------------------------------------------------ */
+const ROBOT_UI_URL = "https://nextgenforge-team.github.io/nextgenforge/index1(1).html";
+const CHATBOT_URL  = "https://nextgenforge-team.github.io/nextgenforge/nextgen-forge";
+
+['robotCard','robotCard2'].forEach(function(id){
+  const el = document.getElementById(id);
+  if(el) el.setAttribute('href', ROBOT_UI_URL);
+});
+['chatCard','chatCard2'].forEach(function(id){
+  const el = document.getElementById(id);
+  if(el) el.setAttribute('href', CHATBOT_URL);
+});
+
+/* scroll-reveal for sections */
+if('IntersectionObserver' in window){
+  const io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold:0.12 });
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+} else {
+  document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); });
+}
+</script>
+</body>
+</html>
