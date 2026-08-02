@@ -1,0 +1,1885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Robo Sanskriti</title>
+
+<!--
+  ============================================================================
+  ROBO SANSKRITI -- interactive culture kiosk UI  (v2 -- "billion times better" edit)
+  Team: NextGen Forge  |  WRO project prototype
+
+  WHAT THIS IS
+  --------------------------------------------------------------------------
+  This is NOT a motor-control dashboard. Your ESP handles driving the robot.
+  This screen is the "face" of the robot: it reacts when the proximity
+  sensor (wired to the ESP, relayed through MIT App Inventor) says someone
+  is standing in front of it, greets them, and then lets them tap around
+  to learn about Indian culture -- festivals, dance, food, monuments,
+  languages, attire, history, yoga, sports and science -- plus a quiz game,
+  a word-of-the-day card, a spin-the-wheel discovery feature, and a
+  "Culture Passport" that collects stamps as a visitor explores.
+
+  WHAT'S NEW IN THIS EDIT
+  --------------------------------------------------------------------------
+  - Culture Passport: a stamp-collecting card that gamifies exploration.
+    Visitors unlock a stamp for every category they open, plus badges for
+    quiz mastery, learning words, and spinning the wheel. Collecting all of
+    them unlocks a "Bharat Yatri" (culture explorer) badge with confetti.
+  - Two new knowledge categories: Sports & Games, Science & Numbers.
+  - More facts, more quiz questions, more words of the day.
+  - Ambient floating diya/petal background, confetti bursts, and a light
+    chime-based sound engine (Web Audio, no external audio files) with a
+    mute toggle in the app bar.
+  - A friendlier, more alive robot face (idle bob + sparkle on happy).
+  - A "Reset demo session" button in Settings, for staff to clear the quiz
+    score / passport between visitors at a booth or judging round.
+  - Small robustness fixes: quiz no longer repeats the same question twice
+    in a row, the wheel can't be double-spun mid-animation, inputs are
+    validated, and keyboard/focus accessibility is improved throughout.
+  - A "Reduce motion" toggle (in addition to respecting the OS-level
+    prefers-reduced-motion setting).
+
+  HOW TO IMPORT INTO MIT APP INVENTOR
+  --------------------------------------------------------------------------
+  1. Upload this file as a Media asset in your App Inventor project.
+  2. Add a WebViewer component, sized to fill the screen.
+  3. Set WebViewer1.HomeUrl to this file (pick it from the Designer's
+     media dropdown, or in Blocks set it to the asset path).
+
+  HOW THE PROXIMITY SENSOR TALKS TO THIS PAGE
+  --------------------------------------------------------------------------
+  Your ESP reads the sensor and sends the distance to the phone (Bluetooth/
+  WiFi -- however you've wired it). In App Inventor Blocks, whenever you
+  get a new reading, set:
+
+      set WebViewer1.WebViewString to  {"distance_cm": 42}
+
+  This page polls that value automatically and, the moment the distance
+  drops below the threshold set in CONFIG (or in the in-app Settings
+  drawer), it plays the greeting animation -- no other wiring needed.
+
+  Two optional fields you can add to that same JSON object:
+      "visitor_name": "Asha"   -> the greeting will include the visitor's
+                                   name once they're detected.
+      "reset": true            -> tells the page to clear the quiz score
+                                   and passport, same as the Settings
+                                   drawer's "Reset demo session" button.
+
+  This page can also talk back to Blocks. Every time it wants the robot to
+  DO something (speak a greeting out loud, react to a quiz answer, etc.) it
+  calls sendToApp({...}), which sets window.AppInventor.setWebViewString(...).
+  Read WebViewer1.WebViewString on a Clock timer in Blocks and, for example,
+  feed the "text" field straight into a TextToSpeech1.Speak call whenever
+  event == "speak" -- that's how you make the robot actually say "Hello!"
+  out loud. Full details are commented in the BRIDGE section at the bottom
+  of the <script>.
+
+  RUNNING THIS ON GITHUB PAGES WITHOUT A PHYSICAL SENSOR
+  --------------------------------------------------------------------------
+  A plain website has no way to read a real ultrasonic/IR sensor -- that
+  only works through the App Inventor bridge above, wired to real hardware.
+  For demos where this page is just opened as a website (e.g. for judges to
+  try on a laptop), there's now a camera-based stand-in: click "Enable
+  camera proximity" in the greeting panel and the browser's webcam watches
+  for a face getting close, estimated from how large the face appears in
+  frame. It's an approximation, not a real distance sensor -- the exact
+  "cm" number is calibrated for a typical laptop webcam and may need
+  adjusting (search "camCalibrationK" in CONFIG) for other cameras. Nothing
+  from the camera is ever recorded, stored, or sent anywhere -- all
+  processing happens locally in the browser, frame by frame, and no image
+  data leaves the page. The manual "Simulate person detected" button always
+  still works as a no-camera-needed fallback.
+
+  HOW TO EDIT THIS UI
+  --------------------------------------------------------------------------
+  - No code, while the app is running: tap the gear icon (top right) to
+    open the Settings drawer -- change the project name, team name, robot
+    name, proximity trigger distance, accent color, sound, and motion, all
+    live. The same drawer has a "Reset demo session" button for staff.
+  - To edit content permanently: everything the robot "knows" -- every
+    festival, dance form, dish, monument, quiz question, and word of the
+    day -- lives in the CULTURE / QUIZ / WORDS / GREETINGS objects near the
+    top of the <script>, each clearly labeled. Add, remove, or rewrite any
+    line there; the UI (including the Passport stamp grid) rebuilds itself
+    from that data automatically.
+  - To re-skin colors/fonts: see the ":root" CSS variables (search
+    "DESIGN TOKENS") near the top of the <style>.
+  ============================================================================
+-->
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   ============================================================ */
+:root{
+  --bg:        #170b2e;
+  --bg-2:      #1f1140;
+  --panel:     #251650;
+  --panel-2:   #1b0f3d;
+  --border:    #3d2a6b;
+  --border-soft:#2c1c53;
+
+  --text:      #fbf3e6;
+  --text-dim:  #c6b6ec;
+  --text-faint:#7c68ab;
+
+  --saffron:   #ff8c3a;   /* primary accent -- warmth, festivity   */
+  --gold:      #f2b53d;   /* secondary accent -- highlights        */
+  --maroon:    #c4325a;   /* tertiary -- dance / attire / sports   */
+  --teal:      #17a5a0;   /* quaternary -- monuments / yoga / sci  */
+  --indigo:    #6a5cd6;   /* quinary -- languages / history        */
+  --ok:        #3ecf8e;
+  --warn:      #f2b53d;
+  --danger:    #ff5c72;
+
+  --accent:    var(--saffron); /* live-editable via Settings drawer */
+
+  --font-display:'Baloo 2','Segoe UI',sans-serif;
+  --font-body:   'Mukta','Segoe UI',Arial,sans-serif;
+  --font-label:  'Rajdhani','Segoe UI',sans-serif;
+
+  --radius:18px;
+  --radius-sm:10px;
+  --gap:12px;
+}
+body.theme-light{
+  --bg:      #fdf6ec;
+  --bg-2:    #f7ead2;
+  --panel:   #ffffff;
+  --panel-2: #fbf2e2;
+  --border:  #eed9b0;
+  --border-soft:#f3e5c4;
+  --text:    #2a1a45;
+  --text-dim:#6a5484;
+  --text-faint:#a595c4;
+}
+
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ margin:0; padding:0; height:100%; }
+body{
+  background:
+    radial-gradient(circle at 10% -10%, rgba(255,140,58,0.12), transparent 40%),
+    radial-gradient(circle at 100% 0%, rgba(106,92,214,0.14), transparent 45%),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  font-size:15.5px;
+  overflow-x:hidden;
+  padding-bottom:36px;
+  transition:background .3s ease,color .3s ease;
+}
+h1,h2,h3,h4{ font-family:var(--font-display); margin:0; }
+button,input,textarea,select{ font-family:var(--font-body); }
+button{ cursor:pointer; }
+::-webkit-scrollbar{ width:6px; height:6px; }
+::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px; }
+
+:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; }
+
+/* rangoli-dot divider used sparingly as a cultural motif */
+.rangoli-divider{
+  height:10px; margin:2px 0 4px;
+  background-image:radial-gradient(circle, var(--accent) 1.6px, transparent 1.8px);
+  background-size:14px 14px; background-position:center; opacity:.55;
+}
+
+/* ============================================================
+   AMBIENT PARTICLE BACKGROUND
+   ============================================================ */
+.particle-layer{ position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+.particle{
+  position:absolute; top:110%; opacity:0;
+  animation-name:floatUp; animation-timing-function:linear; animation-iteration-count:infinite;
+  filter:drop-shadow(0 0 6px rgba(255,180,90,.25));
+}
+@keyframes floatUp{
+  0%{ transform:translateY(0) rotate(0deg); opacity:0; }
+  8%{ opacity:.5; }
+  85%{ opacity:.45; }
+  100%{ transform:translateY(-130vh) rotate(320deg); opacity:0; }
+}
+.appbar, .wrap, .sheet, .drawer, .toast-zone{ position:relative; z-index:2; }
+
+/* ============================================================
+   APP BAR
+   ============================================================ */
+.appbar{
+  position:sticky; top:0; z-index:40;
+  display:flex; align-items:center; gap:10px;
+  padding:12px 14px;
+  background:rgba(23,11,46,0.86);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
+}
+body.theme-light .appbar{ background:rgba(255,250,240,0.88); }
+.appbar .mark{
+  width:38px; height:38px; border-radius:12px; flex:0 0 auto;
+  background:conic-gradient(from 0deg, var(--saffron), var(--gold), var(--maroon), var(--indigo), var(--teal), var(--saffron));
+  display:flex; align-items:center; justify-content:center; font-size:18px;
+}
+.appbar .titles{ flex:1; min-width:0; line-height:1.15; }
+.appbar .titles .team{ font-family:var(--font-label); font-size:11px; letter-spacing:1.5px; color:var(--text-faint); text-transform:uppercase; }
+.appbar .titles h1{ font-size:19px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.appbar .titles h1 span{ color:var(--accent); }
+.appbar-actions{ display:flex; gap:8px; flex:0 0 auto; }
+.iconbtn{
+  width:38px; height:38px; border-radius:11px; border:1px solid var(--border);
+  background:var(--panel-2); color:var(--text); display:flex; align-items:center; justify-content:center;
+  font-size:17px; flex:0 0 auto;
+}
+.iconbtn:active{ transform:scale(.92); }
+
+/* ============================================================
+   LAYOUT SHELL
+   ============================================================ */
+.wrap{ padding:12px; display:flex; flex-direction:column; gap:var(--gap); max-width:720px; margin:0 auto; }
+.card{
+  background:linear-gradient(180deg, var(--panel), var(--panel-2));
+  border:1px solid var(--border); border-radius:var(--radius); padding:16px;
+  position:relative; overflow:hidden;
+}
+.card .card-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+.card .card-head h3{ font-size:15px; letter-spacing:.3px; }
+.card .card-head .tag{
+  font-family:var(--font-label); font-size:11px; color:var(--accent);
+  border:1px solid color-mix(in srgb, var(--accent) 45%, transparent); padding:2px 9px; border-radius:20px;
+}
+
+/* ============================================================
+   GREETING / PROXIMITY PANEL
+   ============================================================ */
+.greet-card{ text-align:center; }
+.status-pill{
+  display:inline-flex; align-items:center; gap:6px; font-family:var(--font-label);
+  font-size:12px; letter-spacing:.5px; padding:5px 12px; border-radius:20px;
+  border:1px solid var(--border); color:var(--text-dim); margin-bottom:10px;
+}
+.status-pill .b{ width:8px; height:8px; border-radius:50%; background:var(--text-faint); }
+.status-pill.active .b{ background:var(--ok); box-shadow:0 0 0 4px rgba(62,207,142,.2); animation:blink 1.4s infinite; }
+@keyframes blink{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+
+.robot-face-wrap{ position:relative; width:180px; height:180px; margin:6px auto 10px; animation:bob 3.6s ease-in-out infinite; filter:drop-shadow(0 8px 26px rgba(255,140,58,.35)); }
+@keyframes bob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-6px); } }
+.face-glow{
+  position:absolute; inset:-14px; border-radius:50%;
+  background:radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, transparent) 0%, transparent 68%);
+  opacity:.75; animation:glowPulse 3.2s ease-in-out infinite; pointer-events:none;
+}
+@keyframes glowPulse{ 0%,100%{ opacity:.5; transform:scale(.94); } 50%{ opacity:.85; transform:scale(1.04); } }
+.mandala-ring{
+  position:absolute; inset:0; border-radius:50%;
+  background:conic-gradient(from 0deg, var(--saffron), var(--gold), var(--maroon), var(--indigo), var(--teal), var(--saffron));
+  animation:spin 14s linear infinite;
+  opacity:.9;
+  box-shadow:0 0 22px 2px color-mix(in srgb, var(--gold) 45%, transparent);
+  -webkit-mask:radial-gradient(circle, transparent 62%, #000 63%, #000 100%);
+          mask:radial-gradient(circle, transparent 62%, #000 63%, #000 100%);
+}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+.robot-face{
+  position:absolute; inset:18px; border-radius:50%;
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255,255,255,.35), transparent 42%),
+    linear-gradient(155deg, color-mix(in srgb, var(--accent) 22%, var(--panel-2)) 0%, var(--panel-2) 65%);
+  border:2px solid var(--accent);
+  box-shadow:
+    inset 0 2px 6px rgba(255,255,255,.25),
+    inset 0 -10px 18px rgba(0,0,0,.28),
+    0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
+}
+.face-shine{
+  position:absolute; top:8%; left:16%; width:38%; height:26%; border-radius:50%;
+  background:radial-gradient(circle, rgba(255,255,255,.55), transparent 70%);
+  pointer-events:none;
+}
+.eyes{ display:flex; gap:22px; }
+.eye{
+  width:17px; height:17px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #fff, var(--gold) 35%, var(--accent) 75%);
+  box-shadow:0 0 10px 2px color-mix(in srgb, var(--accent) 70%, transparent);
+  animation:blinkeye 4.5s infinite;
+}
+@keyframes blinkeye{ 0%,92%,100%{ transform:scaleY(1);} 95%{ transform:scaleY(.1);} }
+.mouth{
+  width:46px; height:18px; border-bottom:4px solid var(--gold); border-radius:0 0 30px 30px;
+  filter:drop-shadow(0 0 6px color-mix(in srgb, var(--gold) 65%, transparent));
+  transition:all .4s ease;
+}
+.robot-face-wrap.happy .mouth{ width:56px; height:28px; }
+.robot-face-wrap.speaking .mouth{ animation:mouthTalk .32s ease-in-out infinite alternate; }
+@keyframes mouthTalk{ from{ transform:scaleY(1); } to{ transform:scaleY(1.55); } }
+.robot-face-wrap.speaking .face-glow{ animation-duration:.7s; }
+.pill-btn.speak-toggle.is-speaking{
+  background:var(--accent); border-color:var(--accent); color:#1a0e05;
+  animation:speakPulse 1s ease-in-out infinite;
+}
+@keyframes speakPulse{ 0%,100%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 50%{ box-shadow:0 0 0 6px transparent; } }
+.sparkle{ position:absolute; font-size:16px; opacity:0; pointer-events:none; filter:drop-shadow(0 0 4px var(--gold)); }
+.robot-face-wrap.happy .sparkle{ animation:twinkle 1.6s ease-in-out infinite; }
+.sparkle.s1{ top:6px; left:0; animation-delay:0s; }
+.sparkle.s2{ top:14px; right:2px; animation-delay:.4s; }
+.sparkle.s3{ bottom:20px; left:-6px; animation-delay:.8s; }
+@keyframes twinkle{ 0%,100%{ opacity:0; transform:scale(.6) rotate(0deg);} 50%{ opacity:1; transform:scale(1.05) rotate(20deg);} }
+
+.greet-text{ font-size:22px; min-height:30px; margin-top:4px; }
+.greet-sub{ font-size:12.5px; color:var(--text-dim); margin-top:2px; font-family:var(--font-label); letter-spacing:.4px; }
+.dist-readout{ font-family:var(--font-label); font-size:12px; color:var(--text-faint); margin-top:8px; }
+.greet-actions{ display:flex; gap:8px; justify-content:center; margin-top:12px; flex-wrap:wrap; }
+.cam-preview-toggle{
+  display:flex; align-items:center; justify-content:center; gap:6px; margin-top:12px;
+  font-size:11.5px; color:var(--text-faint); font-family:var(--font-label); cursor:pointer;
+}
+.cam-preview-wrap{ display:flex; justify-content:center; margin-top:10px; }
+#camVideo{
+  width:140px; height:105px; border-radius:10px; border:1px solid var(--border);
+  object-fit:cover; transform:scaleX(-1); /* mirror, feels natural like a selfie camera */
+}
+.pill-btn{
+  padding:9px 16px; border-radius:20px; border:1px solid var(--border); background:var(--panel-2);
+  color:var(--text); font-size:12.5px; font-weight:600; display:flex; align-items:center; gap:6px;
+}
+.pill-btn.primary{ background:var(--accent); border-color:var(--accent); color:#1a0e05; }
+.pill-btn:active{ transform:scale(.95); }
+.pill-btn:disabled{ opacity:.5; pointer-events:none; }
+
+/* ============================================================
+   CULTURE PASSPORT (signature feature)
+   ============================================================ */
+.passport-card{ overflow:visible; }
+.passport-progress-row{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.passport-bar{ flex:1; height:9px; border-radius:6px; background:var(--panel-2); overflow:hidden; border:1px solid var(--border-soft); }
+.passport-bar-fill{ height:100%; width:0%; background:linear-gradient(90deg,var(--saffron),var(--gold)); transition:width .6s cubic-bezier(.2,.7,.3,1); }
+.passport-count{ font-family:var(--font-label); font-size:12px; color:var(--text-dim); white-space:nowrap; }
+.passport-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:9px; }
+.stamp{
+  aspect-ratio:1; border-radius:14px; border:1.5px dashed var(--border);
+  display:flex; align-items:center; justify-content:center; font-size:21px;
+  background:var(--panel-2); opacity:.32; filter:grayscale(1); position:relative;
+  transition:transform .25s ease, opacity .3s ease, filter .3s ease, border-color .3s ease;
+}
+.stamp.unlocked{ opacity:1; filter:none; border-style:solid; border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.stamp.unlocked.just-in{ animation:stampPop .5s ease; }
+@keyframes stampPop{ 0%{ transform:scale(.4) rotate(-14deg); } 60%{ transform:scale(1.15) rotate(4deg); } 100%{ transform:scale(1) rotate(0deg); } }
+.stamp::after{
+  content:''; position:absolute; bottom:-3px; right:-3px; width:15px; height:15px; border-radius:50%;
+  background:var(--ok); color:#08281a; opacity:0; transform:scale(.4); transition:all .25s ease;
+}
+.stamp.unlocked::after{ opacity:1; transform:scale(1); }
+.passport-badge-banner{
+  margin-top:12px; padding:10px 12px; border-radius:12px; font-size:12.5px; text-align:center;
+  background:linear-gradient(90deg, color-mix(in srgb, var(--saffron) 25%, transparent), color-mix(in srgb, var(--indigo) 25%, transparent));
+  border:1px solid var(--accent); display:none;
+}
+.passport-badge-banner.show{ display:block; }
+
+/* ============================================================
+   DID-YOU-KNOW TICKER
+   ============================================================ */
+.ticker-card{ display:flex; align-items:center; gap:12px; cursor:pointer; }
+.ticker-icon{ font-size:26px; flex:0 0 auto; }
+.ticker-text{ font-size:14px; line-height:1.4; }
+.ticker-label{ font-family:var(--font-label); font-size:10.5px; letter-spacing:1.5px; color:var(--accent); text-transform:uppercase; margin-bottom:3px; }
+
+/* ============================================================
+   CATEGORY GRID
+   ============================================================ */
+.cat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.cat-card{
+  border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--panel-2);
+  padding:14px 12px; text-align:left; color:var(--text); position:relative; overflow:hidden;
+}
+.cat-card:active{ transform:scale(.96); }
+.cat-card::before{
+  content:""; position:absolute; right:-18px; top:-18px; width:64px; height:64px; border-radius:50%;
+  background:var(--cat-color, var(--accent)); opacity:.18;
+}
+.cat-emoji{ font-size:26px; }
+.cat-name{ font-family:var(--font-display); font-size:14.5px; margin-top:8px; }
+.cat-count{ font-family:var(--font-label); font-size:10.5px; color:var(--text-faint); margin-top:2px; }
+.cat-card.done .cat-count::after{ content:' \u2713 explored'; color:var(--ok); }
+
+/* ============================================================
+   MANDALA WHEEL (signature interactive element)
+   ============================================================ */
+.wheel-card{ text-align:center; }
+.wheel-area{ position:relative; width:250px; height:250px; margin:6px auto 14px; }
+.wheel-ring{
+  position:absolute; inset:0; border-radius:50%; border:1px solid var(--border);
+  transition:transform 2.6s cubic-bezier(.17,.67,.14,1.01);
+}
+.wheel-ring.spinning .wheel-seg{ pointer-events:none; }
+.wheel-seg{
+  position:absolute; width:58px; height:58px; margin-left:-29px; margin-top:-29px;
+  border-radius:50%; border:2px solid var(--panel); 
+  display:flex; align-items:center; justify-content:center; font-size:22px;
+  color:#1a0e05; font-weight:700; background:transparent;
+}
+.wheel-center{
+  position:absolute; left:50%; top:50%; width:74px; height:74px; margin-left:-37px; margin-top:-37px;
+  border-radius:50%; background:var(--panel); border:2px solid var(--accent);
+  display:flex; align-items:center; justify-content:center; flex-direction:column; gap:2px;
+  color:var(--accent); font-family:var(--font-label); font-size:11px; letter-spacing:.5px; z-index:5;
+}
+.wheel-center:active{ transform:translate(-50%,-50%) scale(.94); }
+.wheel-center[aria-disabled="true"]{ opacity:.55; }
+.wheel-hint{ font-family:var(--font-label); font-size:11.5px; color:var(--text-faint); letter-spacing:.5px; }
+
+/* ============================================================
+   QUIZ CARD
+   ============================================================ */
+.quiz-q{ font-size:15.5px; margin-bottom:12px; line-height:1.4; }
+.quiz-opts{ display:flex; flex-direction:column; gap:8px; }
+.quiz-opt{
+  text-align:left; padding:11px 14px; border-radius:var(--radius-sm); border:1px solid var(--border);
+  background:var(--panel-2); color:var(--text); font-size:13.5px;
+}
+.quiz-opt:active{ transform:scale(.98); }
+.quiz-opt:disabled{ pointer-events:none; }
+.quiz-opt.correct{ border-color:var(--ok); background:rgba(62,207,142,.15); color:var(--ok); }
+.quiz-opt.wrong{ border-color:var(--danger); background:rgba(255,92,114,.15); color:var(--danger); }
+.quiz-foot{ display:flex; align-items:center; justify-content:space-between; margin-top:12px; }
+.quiz-score{ font-family:var(--font-label); font-size:12.5px; color:var(--text-dim); }
+.quiz-explain{ font-size:12.5px; color:var(--text-dim); margin-top:10px; min-height:18px; line-height:1.4; }
+
+/* ============================================================
+   WORD OF THE DAY
+   ============================================================ */
+.word-card .word-main{ font-family:var(--font-display); font-size:30px; color:var(--accent); }
+.word-card .translit{ font-family:var(--font-label); font-size:13px; color:var(--text-dim); margin-top:2px; }
+.word-card .meaning{ margin-top:10px; font-size:14px; line-height:1.5; }
+.word-card .seen-count{ font-family:var(--font-label); font-size:10.5px; color:var(--text-faint); margin-top:10px; }
+
+/* ============================================================
+   FESTIVAL COUNTDOWN
+   ============================================================ */
+.countdown-list{ display:flex; flex-direction:column; gap:8px; }
+.countdown-item{
+  display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:var(--radius-sm);
+  background:var(--panel-2); border:1px solid var(--border-soft);
+}
+.countdown-item .cd-emoji{ font-size:22px; }
+.countdown-item .cd-name{ font-size:13.5px; flex:1; }
+.countdown-item .cd-days{ font-family:var(--font-label); font-size:13px; color:var(--accent); font-weight:700; }
+.chip-row{ display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+.chip{ font-size:11.5px; padding:5px 10px; border-radius:20px; background:var(--panel-2); border:1px solid var(--border-soft); color:var(--text-dim); }
+.note-line{ font-size:11px; color:var(--text-faint); margin-top:8px; }
+
+/* ============================================================
+   INTERACTION LOG (compact)
+   ============================================================ */
+.log-box{
+  background:var(--panel-2); border:1px solid var(--border-soft); border-radius:var(--radius-sm);
+  padding:10px; max-height:130px; overflow-y:auto; font-family:var(--font-label); font-size:12px;
+}
+.log-box .line{ margin-bottom:5px; opacity:0; animation:fadein .3s ease forwards; color:var(--text-dim); }
+.log-box .t{ color:var(--text-faint); }
+@keyframes fadein{ to{ opacity:1; } }
+
+/* ============================================================
+   MODAL / DETAIL SHEET
+   ============================================================ */
+.sheet-backdrop{
+  position:fixed; inset:0; background:rgba(10,4,22,.6); z-index:90;
+  opacity:0; pointer-events:none; transition:opacity .25s ease;
+}
+.sheet-backdrop.open{ opacity:1; pointer-events:auto; }
+.sheet{
+  position:fixed; left:0; right:0; bottom:0; z-index:95; max-width:720px; margin:0 auto;
+  background:var(--panel); border:1px solid var(--border); border-bottom:none;
+  border-radius:22px 22px 0 0; padding:18px 18px 22px; max-height:78vh; overflow-y:auto;
+  transform:translateY(100%); transition:transform .32s cubic-bezier(.19,1,.22,1);
+}
+.sheet.open{ transform:translateY(0); }
+.sheet .grabber{ width:40px; height:4px; border-radius:4px; background:var(--border); margin:0 auto 14px; }
+.sheet-head{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.sheet-emoji{ font-size:30px; }
+.sheet-title{ font-family:var(--font-display); font-size:19px; }
+.sheet-fact{ font-size:14.5px; line-height:1.55; margin-top:14px; min-height:70px; }
+.sheet-nav{ display:flex; justify-content:space-between; align-items:center; margin-top:10px; }
+.sheet-dots{ display:flex; gap:5px; }
+.sheet-dots i{ width:6px; height:6px; border-radius:50%; background:var(--border); display:block; }
+.sheet-dots i.on{ background:var(--accent); }
+.sheet-close{ position:absolute; top:14px; right:16px; background:none; border:none; color:var(--text-dim); font-size:20px; }
+
+/* ============================================================
+   TOASTS
+   ============================================================ */
+.toast-zone{ position:fixed; top:64px; left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:6px; z-index:120; pointer-events:none; }
+.toast{
+  pointer-events:auto; background:var(--panel); border:1px solid var(--border); border-left:4px solid var(--accent);
+  padding:10px 14px; border-radius:10px; font-size:12.5px; max-width:88%;
+  box-shadow:0 8px 24px rgba(0,0,0,.35); animation:toastin .25s ease, toastout .3s ease 2.7s forwards;
+}
+@keyframes toastin{ from{ transform:translateY(-12px); opacity:0;} to{ transform:translateY(0); opacity:1;} }
+@keyframes toastout{ to{ transform:translateY(-12px); opacity:0; } }
+
+/* ============================================================
+   CONFETTI
+   ============================================================ */
+.confetti-piece{
+  position:fixed; top:-12px; width:8px; height:14px; z-index:200; pointer-events:none;
+  animation-name:confettiFall; animation-timing-function:cubic-bezier(.4,.6,.6,1); animation-fill-mode:forwards;
+  border-radius:2px;
+}
+@keyframes confettiFall{
+  0%{ transform:translateY(0) rotate(0deg); opacity:1; }
+  100%{ transform:translateY(112vh) rotate(720deg); opacity:.15; }
+}
+
+/* ============================================================
+   SETTINGS DRAWER
+   ============================================================ */
+.drawer-backdrop{ position:fixed; inset:0; background:rgba(10,4,22,.55); z-index:130; opacity:0; pointer-events:none; transition:opacity .25s ease; }
+.drawer-backdrop.open{ opacity:1; pointer-events:auto; }
+.drawer{
+  position:fixed; top:0; right:0; bottom:0; width:min(320px,86vw); z-index:135;
+  background:var(--panel); border-left:1px solid var(--border); transform:translateX(100%);
+  transition:transform .3s ease; padding:16px; overflow-y:auto;
+}
+.drawer.open{ transform:translateX(0); }
+.drawer h3{ font-size:15px; margin-bottom:14px; }
+.field{ margin-bottom:12px; }
+.field label{ font-family:var(--font-label); font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.5px; display:block; margin-bottom:4px; }
+.field input{ width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:8px 10px; font-size:13px; }
+.swatch-row{ display:flex; gap:8px; margin-top:4px; }
+.swatch-btn{ width:30px; height:30px; border-radius:50%; border:2px solid transparent; }
+.swatch-btn.active{ border-color:var(--text); }
+.theme-toggle{ display:flex; gap:8px; }
+.theme-toggle button{ flex:1; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel-2); color:var(--text-dim); }
+.theme-toggle button.active{ border-color:var(--accent); color:var(--accent); }
+.apply-btn{ width:100%; padding:11px; border-radius:10px; border:none; margin-top:6px; background:var(--accent); color:#1a0e05; font-weight:700; letter-spacing:.5px; }
+.reset-btn{ width:100%; padding:10px; border-radius:10px; border:1px solid var(--danger); margin-top:10px; background:transparent; color:var(--danger); font-weight:600; display:flex; align-items:center; justify-content:center; gap:6px; }
+.reset-btn:active{ transform:scale(.97); }
+.drawer-close{ position:absolute; top:14px; right:14px; background:none; border:none; color:var(--text-dim); font-size:20px; }
+.foot-note{ font-size:10.5px; color:var(--text-faint); margin-top:16px; line-height:1.5; text-align:center; }
+
+/* ============================================================
+   REDUCED MOTION (explicit override, in addition to OS setting)
+   ============================================================ */
+body.reduce-motion *{ animation-duration:.001s !important; animation-iteration-count:1 !important; transition-duration:.15s !important; }
+body.reduce-motion .particle-layer{ display:none; }
+@media (prefers-reduced-motion: reduce){
+  .particle-layer{ display:none; }
+  .robot-face-wrap{ animation:none; }
+  .face-glow{ animation:none; opacity:.65; }
+}
+</style>
+</head>
+<body>
+
+<div class="particle-layer" id="particleLayer" aria-hidden="true"></div>
+<div class="toast-zone" id="toastZone" aria-live="polite"></div>
+
+<!-- ================= APP BAR ================= -->
+<div class="appbar">
+  <div class="mark">🪔</div>
+  <div class="titles">
+    <div class="team" id="teamLabel">NextGen Forge</div>
+    <h1 id="projectLabel">ROBO <span>SANSKRITI</span></h1>
+  </div>
+  <div class="appbar-actions">
+    <button class="iconbtn" id="soundBtn" title="Toggle sound" aria-pressed="true">&#128266;</button>
+    <button class="iconbtn" id="settingsBtn" title="Edit dashboard">&#9881;</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ================= GREETING / PROXIMITY PANEL ================= -->
+  <div class="card greet-card">
+    <div class="status-pill" id="statusPill" role="status"><span class="b"></span><span id="statusText">Scanning for visitors&hellip;</span></div>
+    <div class="robot-face-wrap" id="faceWrap">
+      <div class="face-glow"></div>
+      <div class="mandala-ring"></div>
+      <div class="robot-face">
+        <div class="face-shine"></div>
+        <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+        <div class="mouth" id="mouth"></div>
+      </div>
+      <span class="sparkle s1">✨</span><span class="sparkle s2">✨</span><span class="sparkle s3">✨</span>
+    </div>
+    <div class="greet-text" id="greetText" aria-live="polite">Namaste! 🙏</div>
+    <div class="greet-sub" id="greetSub">Come closer and say hello</div>
+    <div class="dist-readout" id="distReadout">Proximity: waiting for sensor data&hellip;</div>
+    <div class="greet-actions">
+      <button class="pill-btn primary" id="simulateBtn">👋 Simulate person detected</button>
+      <button class="pill-btn" id="camProxBtn">📷 Enable camera proximity</button>
+      <button class="pill-btn speak-toggle" id="speakBtn">🔊 Read greeting aloud</button>
+    </div>
+    <label class="cam-preview-toggle">
+      <input type="checkbox" id="camPreviewCheck"> Show camera preview (for aiming/calibration only)
+    </label>
+    <div class="cam-preview-wrap" id="camPreviewWrap" style="display:none;">
+      <video id="camVideo" playsinline muted autoplay></video>
+    </div>
+  </div>
+
+  <!-- ================= CULTURE PASSPORT (signature feature) ================= -->
+  <div class="card passport-card">
+    <div class="card-head"><h3>🛂 Your Culture Passport</h3><span class="tag">Collect them all</span></div>
+    <div class="passport-progress-row">
+      <div class="passport-bar"><div class="passport-bar-fill" id="passportBarFill"></div></div>
+      <div class="passport-count" id="passportCount">0 / 0 stamps</div>
+    </div>
+    <div class="passport-grid" id="passportGrid"></div>
+    <div class="note-line">Open a category, ace quiz questions, learn new words, and spin the wheel to fill your passport.</div>
+    <div class="passport-badge-banner" id="passportBanner">🏆 <b>Bharat Yatri</b> unlocked &mdash; you've explored all of India's culture!</div>
+  </div>
+
+  <!-- ================= DID YOU KNOW TICKER ================= -->
+  <div class="card ticker-card" id="tickerCard" role="button" tabindex="0">
+    <div class="ticker-icon">💡</div>
+    <div style="flex:1;">
+      <div class="ticker-label">Did you know?</div>
+      <div class="ticker-text" id="tickerText">Tap this card for a random fact about India&rsquo;s culture&hellip;</div>
+    </div>
+    <button class="pill-btn speak-toggle" id="tickerSpeakBtn" aria-label="Read this fact aloud" style="flex:0 0 auto; padding:9px 11px;">🔊</button>
+  </div>
+
+  <!-- ================= CATEGORY GRID ================= -->
+  <div class="card">
+    <div class="card-head"><h3>Explore Our Culture</h3><span class="tag">Tap a card</span></div>
+    <div class="cat-grid" id="catGrid"></div>
+  </div>
+
+  <!-- ================= MANDALA WHEEL ================= -->
+  <div class="card wheel-card">
+    <div class="card-head"><h3>Spin the Culture Wheel</h3><span class="tag">Surprise me</span></div>
+    <div class="wheel-area">
+      <div class="wheel-ring" id="wheelRing"></div>
+      <div class="wheel-center" id="wheelSpinBtn" role="button" tabindex="0" aria-label="Spin the culture wheel">SPIN<br>&#127775;</div>
+    </div>
+    <div class="wheel-hint">Land on a slice and discover something new</div>
+  </div>
+
+  <!-- ================= QUIZ ================= -->
+  <div class="card">
+    <div class="card-head"><h3>Culture Quiz</h3><span class="tag">Test yourself</span></div>
+    <div class="quiz-q" id="quizQ">Loading question&hellip;</div>
+    <div class="quiz-opts" id="quizOpts"></div>
+    <div class="quiz-explain" id="quizExplain"></div>
+    <div class="quiz-foot">
+      <div class="quiz-score">Score: <b id="quizScore">0</b> / <span id="quizTotal">0</span></div>
+      <button class="pill-btn" id="quizNextBtn">Next question &rarr;</button>
+    </div>
+  </div>
+
+  <!-- ================= WORD OF THE DAY ================= -->
+  <div class="card word-card">
+    <div class="card-head"><h3>Word of the Day</h3><span class="tag">Sanskrit &amp; Hindi</span></div>
+    <div class="word-main" id="wordMain">Namaste</div>
+    <div class="translit" id="wordTranslit">nə-mə-steɪ</div>
+    <div class="meaning" id="wordMeaning">A common greeting said with palms pressed together, meaning roughly "I bow to you."</div>
+    <div class="greet-actions" style="justify-content:flex-start; margin-top:14px;">
+      <button class="pill-btn" id="wordNextBtn">🔄 New word</button>
+    </div>
+    <div class="seen-count" id="wordSeenCount">Words discovered: 1</div>
+  </div>
+
+  <!-- ================= FESTIVAL COUNTDOWN ================= -->
+  <div class="card">
+    <div class="card-head"><h3>Festival Countdown</h3><span class="tag">National days</span></div>
+    <div class="countdown-list" id="countdownList"></div>
+    <div class="note-line">Dates below are fixed national observances. Many festivals (Diwali, Holi, Eid, Onam, Durga Puja&hellip;) follow the lunar calendar and shift every year, so we list them without a specific date:</div>
+    <div class="chip-row" id="variableFestChips"></div>
+  </div>
+
+  <!-- ================= INTERACTION LOG ================= -->
+  <div class="card">
+    <div class="card-head"><h3>Visitor Interaction Log</h3><span class="tag">Live</span></div>
+    <div class="log-box" id="logBox"></div>
+  </div>
+
+  <div class="foot-note">Robo Sanskriti &middot; a cultural greeting kiosk prototype by NextGen Forge for WRO &middot; tap &#9881; to customize</div>
+</div>
+
+<!-- ================= DETAIL SHEET ================= -->
+<div class="sheet-backdrop" id="sheetBackdrop"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <button class="sheet-close" id="sheetClose" aria-label="Close">&times;</button>
+  <div class="grabber"></div>
+  <div class="sheet-head">
+    <div class="sheet-emoji" id="sheetEmoji">🪔</div>
+    <div class="sheet-title" id="sheetTitle">Festivals</div>
+  </div>
+  <div class="sheet-fact" id="sheetFact">Loading&hellip;</div>
+  <div class="sheet-nav">
+    <div class="sheet-dots" id="sheetDots"></div>
+    <button class="pill-btn speak-toggle" id="sheetSpeakBtn" aria-label="Read this fact aloud">🔊</button>
+    <button class="pill-btn primary" id="sheetNextBtn">Next fact &rarr;</button>
+  </div>
+</div>
+
+<!-- ================= SETTINGS DRAWER ================= -->
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+<div class="drawer" id="drawer" role="dialog" aria-modal="true">
+  <button class="drawer-close" id="drawerClose" aria-label="Close">&times;</button>
+  <h3>Edit Dashboard</h3>
+
+  <div class="field"><label>Project Name</label><input id="inProject" type="text"></div>
+  <div class="field"><label>Team Name</label><input id="inTeam" type="text"></div>
+  <div class="field"><label>Proximity trigger distance (cm)</label><input id="inThreshold" type="number" min="5" max="200"></div>
+
+  <div class="field">
+    <label>Accent Color</label>
+    <div class="swatch-row" id="accentSwatches">
+      <button class="swatch-btn active" style="background:#ff8c3a;" data-color="#ff8c3a" aria-label="Saffron accent"></button>
+      <button class="swatch-btn" style="background:#f2b53d;" data-color="#f2b53d" aria-label="Gold accent"></button>
+      <button class="swatch-btn" style="background:#c4325a;" data-color="#c4325a" aria-label="Maroon accent"></button>
+      <button class="swatch-btn" style="background:#17a5a0;" data-color="#17a5a0" aria-label="Teal accent"></button>
+      <button class="swatch-btn" style="background:#6a5cd6;" data-color="#6a5cd6" aria-label="Indigo accent"></button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Theme</label>
+    <div class="theme-toggle">
+      <button id="themeDarkBtn" class="active">Dark</button>
+      <button id="themeLightBtn">Light</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Sound</label>
+    <div class="theme-toggle">
+      <button id="soundOnBtn" class="active">On</button>
+      <button id="soundOffBtn">Off</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Auto-speak greeting</label>
+    <div class="theme-toggle">
+      <button id="autoSpeakOnBtn">On</button>
+      <button id="autoSpeakOffBtn" class="active">Off</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Motion</label>
+    <div class="theme-toggle">
+      <button id="motionOnBtn" class="active">Full</button>
+      <button id="motionReduceBtn">Reduced</button>
+    </div>
+  </div>
+
+  <button class="apply-btn" id="applyBtn">APPLY CHANGES</button>
+  <button class="reset-btn" id="resetBtn">🔄 Reset demo session</button>
+
+  <div class="foot-note">
+    Live changes apply instantly. To make them the new default next time,
+    edit the same fields inside the CONFIG object at the top of the
+    &lt;script&gt; in the HTML file. "Reset demo session" clears the quiz
+    score and passport stamps &mdash; handy between visitors or judges.
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG -- quick-edit starting values. Also editable live
+   from the gear-icon Settings drawer while the app runs.
+   ============================================================ */
+const CONFIG = {
+  projectName: "ROBO SANSKRITI",
+  teamName:    "NextGen Forge",
+  accent:      "#ff8c3a",
+  theme:       "dark",          // "dark" or "light"
+  proximityThresholdCm: 20,     // trigger the greeting when a person is closer than this
+  camCalibrationK: 11,           // camera-proximity estimate tuning -- see "RUNNING THIS ON GITHUB PAGES" note above
+  sound: true,                  // chime sound effects on interactions
+  autoSpeak: true,              // speak greetings aloud automatically when a visitor is detected (browser TTS)
+  reduceMotion: false           // explicit override; OS-level prefers-reduced-motion is also respected
+};
+
+/* ============================================================
+   CULTURE CONTENT -- add / edit / remove freely.
+   Each category: emoji, display name, accent color, list of facts.
+   ============================================================ */
+const CULTURE = [
+  { key:'festivals', emoji:'🪔', name:'Festivals', color:'var(--saffron)', facts:[
+    "Diwali, the festival of lights, is celebrated by lighting diyas (oil lamps) and drawing rangoli patterns to welcome prosperity.",
+    "Holi, the festival of colors, marks the arrival of spring with powder colors, water play, and music.",
+    "Onam, celebrated in Kerala, honors the homecoming of King Mahabali with flower carpets called pookalam and snake-boat races.",
+    "Durga Puja in West Bengal honors Goddess Durga with elaborately decorated pandals and days of cultural performances.",
+    "Pongal and Makar Sankranti celebrate the harvest season and are marked with special rice dishes cooked in the open air.",
+    "Baisakhi celebrates the spring harvest in Punjab and is also linked to the founding of the Khalsa in Sikh tradition.",
+    "Eid-ul-Fitr marks the end of the fasting month of Ramadan with prayers, feasts, and acts of charity.",
+    "Raksha Bandhan celebrates the bond between brothers and sisters, marked by tying a protective thread called a rakhi.",
+    "Navratri, meaning 'nine nights', honors the goddess Durga with dance forms like garba and dandiya raas."
+  ]},
+  { key:'dance', emoji:'💃', name:'Dance & Music', color:'var(--maroon)', facts:[
+    "Bharatanatyam, from Tamil Nadu, is one of the oldest classical dance forms, known for precise footwork and expressive hand gestures called mudras.",
+    "Kathak, from North India, is known for fast spins and rhythmic footwork that narrate stories through movement.",
+    "Odissi, from Odisha, features sculpturesque poses inspired by carvings found on ancient temples.",
+    "Kathakali, from Kerala, blends dance and drama with elaborate makeup and costumes to enact stories from epics.",
+    "Bhangra is an energetic folk dance from Punjab traditionally performed to celebrate the harvest.",
+    "The tabla and sitar are two instruments central to Hindustani classical music.",
+    "Carnatic music, from South India, is built around ragas (melodic frameworks) and talas (rhythmic cycles).",
+    "Manipuri dance, from Manipur, is known for its graceful, fluid movements, often depicting the life of Krishna and Radha.",
+    "Mohiniyattam, from Kerala, is a gentle, swaying classical dance form whose name means 'dance of the enchantress.'"
+  ]},
+  { key:'cuisine', emoji:'🍛', name:'Cuisine', color:'var(--gold)', facts:[
+    "Indian food varies hugely by region, from wheat-based rotis in the north to rice-based meals in the south.",
+    "Masala chai, a spiced milk tea, is a daily ritual for millions of people across the country.",
+    "Biryani, a layered rice dish, has countless regional versions, each with its own blend of spices.",
+    "Dosa and idli, made from fermented rice-and-lentil batter, are popular South Indian breakfast dishes.",
+    "A thali is a platter with several small dishes, designed to balance sweet, sour, salty, bitter and spicy flavors in one meal.",
+    "Street foods like pani puri and chaat are loved for their mix of textures and bold flavors.",
+    "South Indian filter coffee, brewed through a metal filter and served frothy, is a beloved daily ritual in states like Tamil Nadu and Karnataka.",
+    "Regional sweets like rasgulla, gulab jamun, and jalebi are served during festivals and celebrations nationwide."
+  ]},
+  { key:'monuments', emoji:'🕌', name:'Monuments & Heritage', color:'var(--teal)', facts:[
+    "The Taj Mahal in Agra was built by Emperor Shah Jahan as a mausoleum for his wife Mumtaz Mahal, famous for its white marble and symmetry.",
+    "The Qutub Minar in Delhi is one of the tallest brick minarets in the world.",
+    "Hawa Mahal in Jaipur, the 'Palace of Winds', has hundreds of small windows designed to let cool breeze flow through.",
+    "The Ajanta and Ellora caves contain rock-cut Buddhist, Hindu, and Jain monuments carved over many centuries.",
+    "The Konark Sun Temple in Odisha is shaped like a giant stone chariot with intricately carved wheels.",
+    "The Golden Temple in Amritsar is the holiest shrine of Sikhism and serves free meals to every visitor, regardless of background.",
+    "Fatehpur Sikri, near Agra, was a short-lived Mughal capital built almost entirely from red sandstone.",
+    "The Meenakshi Amman Temple in Madurai is famous for its towering, intricately sculpted gopurams (gateway towers)."
+  ]},
+  { key:'languages', emoji:'🗣️', name:'Languages & Greetings', color:'var(--indigo)', facts:[
+    "India's constitution recognizes 22 scheduled languages, and hundreds more are spoken across the country.",
+    "Hindi and English are used for official communication at the national level, alongside many state languages.",
+    "\"Namaste\", said with palms pressed together, is a common greeting meaning roughly \"I bow to you.\"",
+    "Regional greetings vary widely: Vanakkam (Tamil), Namaskaram (Telugu/Malayalam), Sat Sri Akal (Punjabi).",
+    "Many Indian languages have their own unique scripts, such as Devanagari, Tamil, Bengali, and Gurmukhi."
+  ]},
+  { key:'attire', emoji:'🧵', name:'Attire & Textiles', color:'var(--maroon)', facts:[
+    "The sari, a single length of draped cloth, is worn in dozens of regional styles across the country.",
+    "The dhoti and kurta are traditional garments worn by men, especially during festivals and ceremonies.",
+    "Handloom textiles like Banarasi silk, Kanjeevaram silk, and Chikankari embroidery are prized for their craftsmanship.",
+    "Turbans (or pagri) come in many colors and styles, often reflecting regional or community identity.",
+    "Bandhani and block printing are traditional dyeing and printing techniques used to create colorful fabric patterns."
+  ]},
+  { key:'history', emoji:'🕊️', name:'History & Changemakers', color:'var(--indigo)', facts:[
+    "Mahatma Gandhi led India's independence movement through nonviolent civil disobedience.",
+    "Rani Lakshmibai, the Queen of Jhansi, is remembered for her courage while resisting colonial rule in 1857.",
+    "Subhas Chandra Bose organized the Indian National Army in the fight for independence.",
+    "Bhagat Singh became a symbol of youthful revolutionary spirit during the freedom struggle.",
+    "Dr. APJ Abdul Kalam, a scientist who later became President, is remembered as the 'People's President' for his work in aerospace and education.",
+    "India became independent on August 15, 1947, and adopted its constitution on January 26, 1950 -- celebrated as Republic Day."
+  ]},
+  { key:'yoga', emoji:'🧘', name:'Yoga & Spirituality', color:'var(--teal)', facts:[
+    "Yoga, which originated in ancient India, combines physical postures, breathing techniques, and meditation.",
+    "The word 'yoga' comes from a Sanskrit root meaning 'to unite', referring to the union of body and mind.",
+    "June 21 is celebrated worldwide as the International Day of Yoga.",
+    "Meditation and mindfulness practices from Indian traditions have influenced wellness practices around the world.",
+    "Ayurveda, a traditional system of medicine, emphasizes balance between body, mind, and diet."
+  ]},
+  { key:'sports', emoji:'🏏', name:'Sports & Games', color:'var(--maroon)', facts:[
+    "Cricket is by far the most popular sport in India, and the Indian Premier League (IPL) is one of the most-watched sporting leagues in the world.",
+    "Kabaddi, a contact team sport where a 'raider' tags opponents while holding their breath and chanting, has ancient roots in South Asia.",
+    "Chess is widely believed to have originated in India as the game 'chaturanga' before spreading to Persia and beyond.",
+    "Field hockey brought India multiple Olympic gold medals in the mid-20th century, with legendary player Major Dhyan Chand nicknamed 'The Wizard.'",
+    "Traditional games like gilli-danda, kho-kho, and pachisi (an ancestor of Ludo) have been played across generations in Indian villages.",
+    "India has hosted and won the Cricket World Cup, and won the T20 World Cup as well, cheered on by passionate crowds nationwide."
+  ]},
+  { key:'science', emoji:'🔭', name:'Science & Numbers', color:'var(--teal)', facts:[
+    "The concept of zero as a number and placeholder was developed in ancient India, with mathematician Brahmagupta giving it formal rules.",
+    "Aryabhata, an astronomer-mathematician born in 476 CE, calculated an approximation of pi and explained the causes of eclipses.",
+    "India's space agency ISRO landed the Chandrayaan-3 mission near the Moon's south pole in 2023, a first for any country.",
+    "The Mangalyaan mission made India the first Asian nation to reach Mars orbit -- and it did so on its very first attempt.",
+    "The decimal number system, developed in India, was later carried to the wider world through Arab scholars.",
+    "Institutes like the IITs and organizations like ISRO have made India a major hub for engineering, software, and space research."
+  ]}
+];
+
+/* ============================================================
+   QUIZ QUESTIONS -- add as many as you like.
+   ============================================================ */
+const QUIZ = [
+  { q:"Which festival is known as the 'festival of lights'?", opts:["Holi","Diwali","Onam","Eid"], answer:1, explain:"Diwali is celebrated by lighting diyas and decorating homes with rangoli." },
+  { q:"The Taj Mahal is located in which city?", opts:["Jaipur","Agra","Delhi","Varanasi"], answer:1, explain:"The Taj Mahal stands on the banks of the Yamuna river in Agra." },
+  { q:"Which classical dance form originated in Tamil Nadu?", opts:["Kathak","Bharatanatyam","Odissi","Kathakali"], answer:1, explain:"Bharatanatyam is known for precise footwork and expressive hand gestures." },
+  { q:'What does "Namaste" roughly mean?', opts:["Good morning","I bow to you","Thank you","Welcome home"], answer:1, explain:"It's a greeting said with palms together, meaning roughly 'I bow to you.'" },
+  { q:"On which date did India become independent?", opts:["January 26, 1950","August 15, 1947","October 2, 1869","November 14, 1947"], answer:1, explain:"India became independent on August 15, 1947; January 26 is Republic Day." },
+  { q:"Which instrument is central to Hindustani classical music, alongside the sitar?", opts:["Violin","Tabla","Flute","Drum kit"], answer:1, explain:"The tabla is a pair of hand drums central to Hindustani classical music." },
+  { q:"Which dish is a layered rice preparation with many regional versions?", opts:["Dosa","Biryani","Idli","Thali"], answer:1, explain:"Biryani has countless regional variations across India." },
+  { q:"Hawa Mahal, the 'Palace of Winds', is found in which city?", opts:["Udaipur","Jodhpur","Jaipur","Jaisalmer"], answer:2, explain:"Hawa Mahal, with its hundreds of small windows, stands in Jaipur." },
+  { q:"Which leader organized the Indian National Army?", opts:["Bhagat Singh","Subhas Chandra Bose","Sardar Patel","Mahatma Gandhi"], answer:1, explain:"Subhas Chandra Bose organized the Indian National Army (Azad Hind Fauj)." },
+  { q:"Which day is celebrated worldwide as International Day of Yoga?", opts:["January 1","June 21","October 2","August 15"], answer:1, explain:"June 21 was declared International Day of Yoga by the United Nations." },
+  { q:"Which monument is shaped like a giant stone chariot?", opts:["Qutub Minar","Konark Sun Temple","Golden Temple","Ajanta Caves"], answer:1, explain:"The Konark Sun Temple in Odisha is carved to resemble a huge chariot." },
+  { q:"Rangoli patterns are traditionally made using which materials?", opts:["Colored powders or flower petals","Clay bricks","Metal sheets","Glass beads"], answer:0, explain:"Rangoli is drawn on the floor using colored powder, rice, or flower petals." },
+  { q:"Which board game is believed to have originated in India as 'chaturanga'?", opts:["Carrom","Chess","Ludo","Backgammon"], answer:1, explain:"Chaturanga, an ancient Indian strategy game, is considered an ancestor of modern chess." },
+  { q:"Which Indian sport features a 'raider' who tags opponents while holding their breath?", opts:["Kho-kho","Kabaddi","Gilli-danda","Pachisi"], answer:1, explain:"In kabaddi, a raider chants and tags opponents in one breath before returning to their side." },
+  { q:"Field hockey legend Dhyan Chand was nicknamed what?", opts:["The Wizard","The Wall","The Flash","The Maestro"], answer:0, explain:"Major Dhyan Chand's extraordinary ball control earned him the nickname 'The Wizard.'" },
+  { q:"Which ancient Indian mathematician is credited with giving zero its formal rules?", opts:["Aryabhata","Brahmagupta","Ramanujan","Bhaskara"], answer:1, explain:"Brahmagupta wrote down formal rules for arithmetic with zero in the 7th century." },
+  { q:"India's Chandrayaan-3 mission made history landing near which part of the Moon?", opts:["North pole","Equator","South pole","Far side"], answer:2, explain:"Chandrayaan-3 landed near the Moon's south pole in 2023, a first for any nation." },
+  { q:"Which mission made India the first Asian nation to reach Mars orbit?", opts:["Chandrayaan-1","Mangalyaan","Gaganyaan","Aditya-L1"], answer:1, explain:"Mangalyaan (Mars Orbiter Mission) reached Mars orbit on its very first attempt." },
+  { q:"Which classical dance form comes from Manipur?", opts:["Manipuri","Kathak","Odissi","Kuchipudi"], answer:0, explain:"Manipuri dance is known for graceful, fluid movements depicting Krishna and Radha." },
+  { q:"What does 'Mohiniyattam' roughly mean?", opts:["Dance of the warrior","Dance of the enchantress","Dance of the peacock","Dance of rain"], answer:1, explain:"Mohiniyattam, from Kerala, means 'dance of the enchantress.'" },
+  { q:"Raksha Bandhan celebrates the bond between which family members?", opts:["Parents and children","Brothers and sisters","Husband and wife","Grandparents and grandchildren"], answer:1, explain:"A sister ties a rakhi thread on her brother's wrist as a symbol of their bond." },
+  { q:"Fatehpur Sikri, a short-lived Mughal capital, is built almost entirely from which material?", opts:["White marble","Red sandstone","Black granite","Teakwood"], answer:1, explain:"Fatehpur Sikri near Agra is famed for its red sandstone architecture." }
+];
+
+/* ============================================================
+   WORD OF THE DAY BANK
+   ============================================================ */
+const WORDS = [
+  { word:"Namaste", translit:"nuh-mus-tay", meaning:"A common greeting said with palms pressed together, meaning roughly \"I bow to you.\"" },
+  { word:"Dharma", translit:"dhur-muh", meaning:"One's duty or righteous path; a core idea in Indian philosophy about living rightly." },
+  { word:"Atithi Devo Bhava", translit:"uh-ti-thi day-voh buh-vuh", meaning:"\"The guest is equivalent to God\" -- a traditional value placed on hospitality." },
+  { word:"Vasudhaiva Kutumbakam", translit:"vuh-su-dhai-vuh ku-tum-buh-kum", meaning:"\"The world is one family\" -- a philosophy of universal kinship." },
+  { word:"Ahimsa", translit:"uh-him-sa", meaning:"Non-violence; a principle strongly associated with Mahatma Gandhi's philosophy." },
+  { word:"Seva", translit:"say-vuh", meaning:"Selfless service -- helping others without expecting anything in return." },
+  { word:"Guru", translit:"goo-roo", meaning:"A teacher or guide, traditionally one who helps dispel ignorance with knowledge." },
+  { word:"Satyameva Jayate", translit:"sut-yuh-may-vuh juh-yuh-tay", meaning:"\"Truth alone triumphs\" -- India's national motto." },
+  { word:"Shanti", translit:"shaan-ti", meaning:"Peace -- often chanted three times at the close of prayers." },
+  { word:"Rangoli", translit:"run-goh-lee", meaning:"A decorative floor art made using colored powder, rice grains, or flower petals." },
+  { word:"Jugaad", translit:"joo-gaad", meaning:"A flexible, resourceful approach to solving a problem with limited resources -- an improvised fix." },
+  { word:"Sanskriti", translit:"sun-skri-ti", meaning:"Culture -- the word this kiosk borrows its name from." },
+  { word:"Yatra", translit:"yaa-tra", meaning:"A journey or pilgrimage, often referring to a trip to a sacred site." },
+  { word:"Utsav", translit:"oot-sav", meaning:"Festival or celebration -- a time of joy shared with community." }
+];
+
+/* ============================================================
+   GREETINGS -- rotate through India's linguistic diversity.
+   ============================================================ */
+const GREETINGS = [
+  { lang:"Hindi", text:"नमस्ते! 🙏", code:"hi-IN" },
+  { lang:"Tamil", text:"வணக்கம்!", code:"ta-IN" },
+  { lang:"Bengali", text:"নমস্কার!", code:"bn-IN" },
+  { lang:"Telugu", text:"నమస్కారం!", code:"te-IN" },
+  { lang:"Marathi", text:"नमस्कार!", code:"mr-IN" },
+  { lang:"Punjabi", text:"ਸਤ ਸ੍ਰੀ ਅਕਾਲ!", code:"pa-IN" },
+  { lang:"Kannada", text:"ನಮಸ್ಕಾರ!", code:"kn-IN" },
+  { lang:"Malayalam", text:"നമസ്കാരം!", code:"ml-IN" },
+  { lang:"Gujarati", text:"નમસ્તે!", code:"gu-IN" },
+  { lang:"English", text:"Hello! Welcome!", code:"en-IN" }
+];
+
+/* fixed-date national observances used for the countdown */
+const FESTIVALS_FIXED = [
+  { name:"Republic Day", emoji:"🇮🇳", month:1, day:26 },
+  { name:"Makar Sankranti / Pongal", emoji:"🌾", month:1, day:14 },
+  { name:"Independence Day", emoji:"🇮🇳", month:8, day:15 },
+  { name:"Gandhi Jayanti", emoji:"🕊️", month:10, day:2 },
+  { name:"Christmas", emoji:"🎄", month:12, day:25 }
+];
+/* lunar-calendar festivals -- shown without a specific date, since they shift every year */
+const FESTIVALS_VARIABLE = ["Holi","Diwali","Eid-ul-Fitr","Onam","Durga Puja","Raksha Bandhan","Navratri","Baisakhi"];
+
+/* ============================================================
+   PASSPORT STAMP DEFINITIONS
+   Category stamps come from CULTURE automatically; these are the
+   extra achievement stamps layered on top.
+   ============================================================ */
+const ACHIEVEMENTS = [
+  { key:'quizmaster', emoji:'🏅', name:'Quiz Master', goal:5 },
+  { key:'wordsmith',  emoji:'📖', name:'Wordsmith',   goal:5 },
+  { key:'spinner',    emoji:'🎡', name:'Wheel Spinner', goal:3 }
+];
+function passportStampDefs(){
+  return CULTURE.map(function(c){ return { key:c.key, emoji:c.emoji, name:c.name }; })
+    .concat(ACHIEVEMENTS.map(function(a){ return { key:a.key, emoji:a.emoji, name:a.name }; }));
+}
+
+/* ============================================================
+   STATE
+   ============================================================ */
+let state = {
+  personDetected:false,
+  greetIndex:0,
+  quizIndex:-1,
+  quizScore:0,
+  quizTotal:0,
+  quizCorrectCount:0,
+  quizAnswered:false,
+  wordIndex:0,
+  wordsSeen:{},           // map of word text -> true, tracks unique words viewed
+  sheetCategoryIndex:0,
+  sheetFactIndex:0,
+  wheelRotation:0,
+  wheelSpinning:false,
+  wheelSpinCount:0,
+  passport:{},             // map of stamp key -> true
+  pendingVisitorName:null
+};
+let greetTimer=null, tickerTimer=null;
+
+/* ============================================================
+   SOUND ENGINE -- short synthesized chimes, no audio files needed.
+   ============================================================ */
+let audioCtx = null;
+function ensureAudio(){
+  if(audioCtx) return audioCtx;
+  try{
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if(Ctx) audioCtx = new Ctx();
+  }catch(e){ /* Web Audio not available -- sound effects are optional, ignore */ }
+  return audioCtx;
+}
+function playTone(freq, duration, type){
+  if(!CONFIG.sound) return;
+  const ctx = ensureAudio();
+  if(!ctx) return;
+  try{
+    if(ctx.state === 'suspended'){ ctx.resume(); }
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + duration + 0.03);
+  }catch(e){ /* ignore playback errors */ }
+}
+function soundTap(){ playTone(520, 0.07); }
+function soundCorrect(){ playTone(660, 0.11); setTimeout(function(){ playTone(880, 0.15); }, 90); }
+function soundWrong(){ playTone(210, 0.22, 'sawtooth'); }
+function soundWelcome(){
+  playTone(523, 0.14);
+  setTimeout(function(){ playTone(659, 0.14); }, 110);
+  setTimeout(function(){ playTone(784, 0.22); }, 220);
+}
+
+/* ============================================================
+   TEXT-TO-SPEECH ENGINE -- reads text aloud in the browser itself
+   (Web Speech API) so "Read greeting aloud" works standalone, in
+   addition to sending the text to App Inventor's TextToSpeech via
+   sendToApp({event:'speak', ...}) for when this runs inside the
+   WebViewer on the robot.
+   ============================================================ */
+const ttsSupported = (typeof window !== 'undefined') && ('speechSynthesis' in window);
+function speaking(){ return ttsSupported && window.speechSynthesis.speaking; }
+function speakText(text, langCode){
+  if(!ttsSupported){ showToast('This browser can\u2019t read text aloud'); return; }
+  try{
+    window.speechSynthesis.cancel(); // stop anything currently being read
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = langCode || 'en-IN';
+    utter.rate = 0.95;
+    utter.pitch = 1.05;
+    utter.onstart = function(){
+      document.getElementById('faceWrap').classList.add('speaking');
+      document.querySelectorAll('.speak-toggle').forEach(function(b){ b.classList.add('is-speaking'); });
+    };
+    const stopVisuals = function(){
+      document.getElementById('faceWrap').classList.remove('speaking');
+      document.querySelectorAll('.speak-toggle').forEach(function(b){ b.classList.remove('is-speaking'); });
+    };
+    utter.onend = stopVisuals;
+    utter.onerror = stopVisuals;
+    window.speechSynthesis.speak(utter);
+  }catch(e){ showToast('Couldn\u2019t read that aloud'); }
+}
+function stopSpeaking(){
+  if(ttsSupported) window.speechSynthesis.cancel();
+  document.getElementById('faceWrap').classList.remove('speaking');
+  document.querySelectorAll('.speak-toggle').forEach(function(b){ b.classList.remove('is-speaking'); });
+}
+function soundStamp(){ playTone(784, 0.09); setTimeout(function(){ playTone(1046, 0.18); }, 100); }
+function soundFanfare(){ [523,659,784,1046].forEach(function(f, i){ setTimeout(function(){ playTone(f, 0.22); }, i * 110); }); }
+
+/* ============================================================
+   AMBIENT PARTICLES + CONFETTI
+   ============================================================ */
+function motionReduced(){
+  return CONFIG.reduceMotion || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+function buildParticles(){
+  const layer = document.getElementById('particleLayer');
+  if(!layer) return;
+  layer.innerHTML = '';
+  if(motionReduced()) return;
+  const symbols = ['🪔','🌸','✨'];
+  const count = 9;
+  for(let i=0;i<count;i++){
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.textContent = symbols[Math.floor(Math.random() * symbols.length)];
+    p.style.left = Math.round(Math.random() * 100) + 'vw';
+    p.style.fontSize = (12 + Math.random() * 14).toFixed(0) + 'px';
+    p.style.animationDuration = (16 + Math.random() * 12).toFixed(1) + 's';
+    p.style.animationDelay = (Math.random() * -20).toFixed(1) + 's';
+    layer.appendChild(p);
+  }
+}
+function confettiBurst(count){
+  if(motionReduced()) return;
+  count = count || 24;
+  const colors = ['var(--saffron)','var(--gold)','var(--maroon)','var(--teal)','var(--indigo)'];
+  for(let i=0;i<count;i++){
+    const el = document.createElement('div');
+    el.className = 'confetti-piece';
+    el.style.left = Math.round(Math.random() * 100) + 'vw';
+    el.style.background = colors[Math.floor(Math.random() * colors.length)];
+    el.style.animationDuration = (1.5 + Math.random() * 1.3).toFixed(2) + 's';
+    document.body.appendChild(el);
+    (function(node){ setTimeout(function(){ node.remove(); }, 3200); })(el);
+  }
+}
+
+/* ============================================================
+   INIT / RENDER FROM CONFIG
+   ============================================================ */
+function renderConfigToDOM(){
+  document.getElementById('teamLabel').textContent = CONFIG.teamName;
+  document.getElementById('projectLabel').innerHTML =
+    CONFIG.projectName.replace(/(\S+)$/, '<span>$1</span>');
+  document.documentElement.style.setProperty('--accent', CONFIG.accent);
+  document.body.classList.toggle('theme-light', CONFIG.theme === 'light');
+  document.body.classList.toggle('reduce-motion', !!CONFIG.reduceMotion);
+  document.getElementById('themeDarkBtn').classList.toggle('active', CONFIG.theme !== 'light');
+  document.getElementById('themeLightBtn').classList.toggle('active', CONFIG.theme === 'light');
+  document.getElementById('soundOnBtn').classList.toggle('active', CONFIG.sound !== false);
+  document.getElementById('soundOffBtn').classList.toggle('active', CONFIG.sound === false);
+  document.getElementById('autoSpeakOnBtn').classList.toggle('active', !!CONFIG.autoSpeak);
+  document.getElementById('autoSpeakOffBtn').classList.toggle('active', !CONFIG.autoSpeak);
+  document.getElementById('motionOnBtn').classList.toggle('active', !CONFIG.reduceMotion);
+  document.getElementById('motionReduceBtn').classList.toggle('active', !!CONFIG.reduceMotion);
+  document.getElementById('soundBtn').textContent = CONFIG.sound !== false ? '\uD83D\uDD0A' : '\uD83D\uDD07';
+  document.getElementById('soundBtn').setAttribute('aria-pressed', CONFIG.sound !== false ? 'true' : 'false');
+  buildParticles();
+}
+
+/* ============================================================
+   TOASTS + LOG
+   ============================================================ */
+function showToast(msg){
+  const zone = document.getElementById('toastZone');
+  if(!zone) return;
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  zone.appendChild(t);
+  setTimeout(function(){ t.remove(); }, 3000);
+}
+function addLog(msg){
+  const box = document.getElementById('logBox');
+  if(!box) return;
+  const time = new Date().toLocaleTimeString('en-GB',{hour12:false});
+  const line = document.createElement('div');
+  line.className = 'line';
+  line.innerHTML = '<span class="t">[' + time + ']</span> ' + msg;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+  while(box.children.length > 40){ box.removeChild(box.firstChild); }
+}
+
+/* ============================================================
+   CULTURE PASSPORT
+   ============================================================ */
+function buildPassport(){
+  const grid = document.getElementById('passportGrid');
+  if(!grid) return;
+  grid.innerHTML = '';
+  const defs = passportStampDefs();
+  defs.forEach(function(d){
+    const el = document.createElement('div');
+    el.className = 'stamp' + (state.passport[d.key] ? ' unlocked' : '');
+    el.dataset.key = d.key;
+    el.title = d.name;
+    el.textContent = d.emoji;
+    grid.appendChild(el);
+  });
+  updatePassportProgress();
+}
+function updatePassportProgress(){
+  const defs = passportStampDefs();
+  const total = defs.length;
+  const collected = defs.filter(function(d){ return !!state.passport[d.key]; }).length;
+  const fill = document.getElementById('passportBarFill');
+  const count = document.getElementById('passportCount');
+  if(fill) fill.style.width = (total ? Math.round((collected/total)*100) : 0) + '%';
+  if(count) count.textContent = collected + ' / ' + total + ' stamps';
+  document.getElementById('passportBanner').classList.toggle('show', collected === total && total > 0);
+}
+function markStamp(key){
+  if(state.passport[key]) return; // already collected
+  const defs = passportStampDefs();
+  const def = defs.filter(function(d){ return d.key === key; })[0];
+  state.passport[key] = true;
+  const el = document.querySelector('.stamp[data-key="' + key + '"]');
+  if(el){
+    el.classList.add('unlocked','just-in');
+    setTimeout(function(){ el.classList.remove('just-in'); }, 550);
+  }
+  const catCard = document.querySelector('.cat-card[data-key="' + key + '"]');
+  if(catCard) catCard.classList.add('done');
+  updatePassportProgress();
+  soundStamp();
+  confettiBurst(18);
+  showToast('Stamp collected: ' + (def ? def.name : key));
+  addLog('Passport stamp earned: ' + (def ? def.name : key));
+  sendToApp({ event:'stamp_collected', stamp:key });
+
+  const total = defs.length;
+  const collected = defs.filter(function(d){ return !!state.passport[d.key]; }).length;
+  if(collected === total){
+    soundFanfare();
+    confettiBurst(48);
+    showToast('🏆 Bharat Yatri unlocked -- full passport!');
+    addLog('All stamps collected -- Bharat Yatri badge unlocked!');
+    sendToApp({ event:'passport_complete' });
+  }
+}
+
+/* ============================================================
+   GREETING / PROXIMITY BEHAVIOUR
+   ============================================================ */
+function setScanning(){
+  state.personDetected = false;
+  clearInterval(greetTimer);
+  document.getElementById('statusPill').classList.remove('active');
+  document.getElementById('statusText').textContent = 'Scanning for visitors\u2026';
+  document.getElementById('faceWrap').classList.remove('happy');
+  document.getElementById('greetText').textContent = 'Namaste! \uD83D\uDE4F';
+  document.getElementById('greetSub').textContent = 'Come closer and say hello';
+}
+
+function personDetected(distance){
+  if(state.personDetected) return; // already greeting
+  state.personDetected = true;
+  document.getElementById('statusPill').classList.add('active');
+  document.getElementById('statusText').textContent = 'Visitor detected!';
+  document.getElementById('faceWrap').classList.add('happy');
+  const name = state.pendingVisitorName;
+  addLog('Person detected at ' + Math.round(distance) + ' cm' + (name ? ' (' + name + ')' : '') + ' \u2014 greeting started');
+  sendToApp({ event:'person_detected', distance:distance });
+  soundWelcome();
+
+  let i = 0;
+  document.getElementById('greetText').textContent = GREETINGS[0].text;
+  document.getElementById('greetSub').textContent = GREETINGS[0].lang + (name ? ' \u00b7 Hello, ' + name + '!' : '');
+  const welcomeText = name ? ('Hello, ' + name + '! Welcome to Robo Sanskriti.') : 'Hello! Welcome to Robo Sanskriti.';
+  sendToApp({ event:'speak', text: welcomeText });
+  if(CONFIG.autoSpeak) speakText(welcomeText, 'en-IN'); // on by default -- toggle "Auto-speak greeting" off in Settings for a silent kiosk
+
+  clearInterval(greetTimer);
+  greetTimer = setInterval(function(){
+    i = (i + 1) % GREETINGS.length;
+    document.getElementById('greetText').textContent = GREETINGS[i].text;
+    document.getElementById('greetSub').textContent = GREETINGS[i].lang + (name ? ' \u00b7 Hello, ' + name + '!' : '');
+  }, 1800);
+
+  // return to scanning mode after the greeting sequence plays out
+  setTimeout(function(){ setScanning(); state.pendingVisitorName = null; }, 9000);
+}
+
+function updateDistanceReadout(distance){
+  if(typeof distance !== 'number' || isNaN(distance)) return;
+  document.getElementById('distReadout').textContent =
+    'Proximity: ' + Math.round(distance) + ' cm (trigger at ' + CONFIG.proximityThresholdCm + ' cm)';
+  if(distance <= CONFIG.proximityThresholdCm){
+    personDetected(distance);
+  }
+}
+
+/* ============================================================
+   CAMERA-BASED PROXIMITY (for running as a plain website, e.g.
+   GitHub Pages, with no physical sensor attached). Estimates how
+   close a face is from how large it appears in the webcam frame.
+   This is an approximation, calibrated for a typical laptop
+   webcam -- adjust CONFIG.camCalibrationK if it triggers too
+   early/late on a given device. Nothing from the camera is ever
+   stored or sent anywhere; all detection happens locally, frame
+   by frame, and is thrown away immediately after each estimate.
+   ============================================================ */
+let camStream = null;
+let camDetectTimer = null;
+let camModelsLoaded = false;
+let camActive = false;
+
+function setCamProxStatus(text){
+  const btn = document.getElementById('camProxBtn');
+  if(!camActive){ btn.textContent = '📷 Enable camera proximity'; }
+  if(text) document.getElementById('distReadout').textContent = text;
+}
+
+async function enableCameraProximity(){
+  if(camActive) return;
+  const btn = document.getElementById('camProxBtn');
+  if(typeof faceapi === 'undefined'){
+    showToast('Camera detector failed to load \u2014 check your internet connection and try again.');
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '📷 Starting camera\u2026';
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' }, audio:false });
+  }catch(e){
+    showToast('Camera permission was denied or unavailable \u2014 use "Simulate person detected" instead.');
+    btn.disabled = false;
+    btn.textContent = '📷 Enable camera proximity';
+    return;
+  }
+  const video = document.getElementById('camVideo');
+  video.srcObject = camStream;
+  try{ await video.play(); }catch(e){ /* autoplay quirks -- ignore, play() already attempted via autoplay attr */ }
+
+  if(!camModelsLoaded){
+    btn.textContent = '📷 Loading face detector\u2026';
+    try{
+      await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights');
+      camModelsLoaded = true;
+      addLog('Face detector model loaded successfully.');
+    }catch(e){
+      showToast('Face detector model failed to load \u2014 check your internet connection.');
+      addLog('Face detector model FAILED to load: ' + (e && e.message ? e.message : String(e)));
+      disableCameraProximity();
+      btn.disabled = false;
+      return;
+    }
+  }
+
+  camActive = true;
+  btn.disabled = false;
+  btn.textContent = '📷 Disable camera proximity';
+  addLog('Camera-based proximity enabled \u2014 the greeting now triggers as soon as a face is detected in frame (no distance threshold needed for the camera).');
+  addLog('Tip: good, even lighting on your face and looking toward the camera help detection the most.');
+
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize:416, scoreThreshold:0.2 });
+  let camErrorLogged = false;
+  let camNoFaceStreak = 0;
+  camDetectTimer = setInterval(async function(){
+    if(!camActive || !video.videoWidth) return;
+    try{
+      const detection = await faceapi.detectSingleFace(video, options);
+      if(detection && detection.box && detection.box.width > 0){
+        camNoFaceStreak = 0;
+        const widthFraction = detection.box.width / video.videoWidth;
+        const estimatedCm = Math.max(8, Math.min(300, CONFIG.camCalibrationK / widthFraction));
+        document.getElementById('distReadout').textContent =
+          'Proximity: face detected (~' + Math.round(estimatedCm) + ' cm est.)';
+        // Camera mode: presence is the signal, not a precise distance --
+        // greet as soon as ANY face is seen, rather than gating on a
+        // webcam distance estimate that's hard to calibrate reliably.
+        personDetected(estimatedCm);
+      } else {
+        camNoFaceStreak++;
+        if(!state.personDetected){
+          document.getElementById('distReadout').textContent =
+            'Proximity: camera active \u2014 no one in frame yet';
+        }
+        // If it's never once detected a face after ~9 seconds of tries, something's
+        // likely wrong (lighting, framing, or the model) -- say so once, visibly.
+        if(camNoFaceStreak === 20){
+          addLog('No face detected in the last ~9s. Try: better lighting, centering your face in frame, or checking "Show camera preview" to see exactly what the camera sees.');
+        }
+      }
+    }catch(e){
+      if(!camErrorLogged){
+        camErrorLogged = true;
+        addLog('Camera proximity error: ' + (e && e.message ? e.message : String(e)));
+      }
+    }
+  }, 450);
+}
+
+function disableCameraProximity(){
+  camActive = false;
+  if(camDetectTimer){ clearInterval(camDetectTimer); camDetectTimer = null; }
+  if(camStream){ camStream.getTracks().forEach(function(t){ t.stop(); }); camStream = null; }
+  const video = document.getElementById('camVideo');
+  video.srcObject = null;
+  const btn = document.getElementById('camProxBtn');
+  btn.disabled = false;
+  btn.textContent = '📷 Enable camera proximity';
+  document.getElementById('distReadout').textContent = 'Proximity: waiting for sensor data\u2026';
+}
+
+/* stop the camera automatically if the tab is hidden or the page closes,
+   so it's never quietly running in the background */
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden && camActive) disableCameraProximity();
+});
+window.addEventListener('pagehide', function(){ if(camActive) disableCameraProximity(); });
+
+/* ============================================================
+   DID-YOU-KNOW TICKER
+   ============================================================ */
+function randomFactPool(){
+  const pool = [];
+  CULTURE.forEach(function(cat){
+    cat.facts.forEach(function(f){ pool.push(f); });
+  });
+  return pool;
+}
+function showRandomTickerFact(){
+  const pool = randomFactPool();
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  document.getElementById('tickerText').textContent = pick;
+}
+
+/* ============================================================
+   CATEGORY GRID
+   ============================================================ */
+function buildCategoryGrid(){
+  const grid = document.getElementById('catGrid');
+  grid.innerHTML = '';
+  CULTURE.forEach(function(cat, idx){
+    const card = document.createElement('button');
+    card.className = 'cat-card' + (state.passport[cat.key] ? ' done' : '');
+    card.dataset.key = cat.key;
+    card.style.setProperty('--cat-color', cat.color);
+    card.innerHTML =
+      '<div class="cat-emoji">' + cat.emoji + '</div>' +
+      '<div class="cat-name">' + cat.name + '</div>' +
+      '<div class="cat-count">' + cat.facts.length + ' facts</div>';
+    card.addEventListener('click', function(){ soundTap(); openSheet(idx); });
+    grid.appendChild(card);
+  });
+}
+
+/* ============================================================
+   MANDALA WHEEL
+   ============================================================ */
+function buildWheel(){
+  const ring = document.getElementById('wheelRing');
+  ring.innerHTML = '';
+  const n = CULTURE.length;
+  const colors = CULTURE.map(function(c){ return c.color; });
+  let gradientStops = [];
+  for(let i=0;i<n;i++){
+    const start = (360/n)*i, end = (360/n)*(i+1);
+    gradientStops.push(colors[i] + ' ' + start + 'deg ' + end + 'deg');
+  }
+  ring.style.background = 'conic-gradient(' + gradientStops.join(',') + ')';
+  ring.style.borderRadius = '50%';
+
+  const radius = 95; // px, distance of each segment's center from wheel center
+  for(let i=0;i<n;i++){
+    const angleDeg = (360/n)*i + (360/n)/2 - 90; // -90 so first slice starts at top
+    const rad = angleDeg * Math.PI / 180;
+    const x = 125 + radius * Math.cos(rad);
+    const y = 125 + radius * Math.sin(rad);
+    const seg = document.createElement('button');
+    seg.className = 'wheel-seg';
+    seg.style.left = x + 'px';
+    seg.style.top = y + 'px';
+    seg.textContent = CULTURE[i].emoji;
+    seg.setAttribute('aria-label', CULTURE[i].name);
+    seg.addEventListener('click', function(){ soundTap(); openSheet(i); });
+    ring.appendChild(seg);
+  }
+}
+
+function spinWheel(){
+  if(state.wheelSpinning) return; // guard against double-spin mid-animation
+  state.wheelSpinning = true;
+  const ring = document.getElementById('wheelRing');
+  const spinBtn = document.getElementById('wheelSpinBtn');
+  ring.classList.add('spinning');
+  spinBtn.setAttribute('aria-disabled', 'true');
+  soundTap();
+
+  const n = CULTURE.length;
+  const pick = Math.floor(Math.random() * n);
+  const sliceAngle = 360/n;
+  // rotate several full turns then land the chosen slice at the top pointer
+  const targetAngle = 360*4 + (360 - (pick*sliceAngle + sliceAngle/2));
+  state.wheelRotation += targetAngle;
+  ring.style.transform = 'rotate(' + state.wheelRotation + 'deg)';
+  addLog('Wheel spun \u2192 landed on ' + CULTURE[pick].name);
+  sendToApp({ event:'wheel_spin', result:CULTURE[pick].key });
+
+  state.wheelSpinCount++;
+  if(state.wheelSpinCount >= 3) markStamp('spinner');
+
+  setTimeout(function(){
+    ring.classList.remove('spinning');
+    spinBtn.removeAttribute('aria-disabled');
+    state.wheelSpinning = false;
+    openSheet(pick);
+  }, 2650);
+}
+
+/* ============================================================
+   DETAIL SHEET
+   ============================================================ */
+function openSheet(catIndex){
+  state.sheetCategoryIndex = catIndex;
+  state.sheetFactIndex = 0;
+  const cat = CULTURE[catIndex];
+  document.getElementById('sheetEmoji').textContent = cat.emoji;
+  document.getElementById('sheetTitle').textContent = cat.name;
+  renderSheetFact();
+  document.getElementById('sheet').classList.add('open');
+  document.getElementById('sheetBackdrop').classList.add('open');
+  addLog('Opened category: ' + cat.name);
+  sendToApp({ event:'category_opened', category:cat.key });
+  markStamp(cat.key);
+  const card = document.querySelector('.cat-card[data-key="' + cat.key + '"]');
+  if(card) card.classList.add('done');
+}
+function renderSheetFact(){
+  const cat = CULTURE[state.sheetCategoryIndex];
+  document.getElementById('sheetFact').textContent = cat.facts[state.sheetFactIndex];
+  const dots = document.getElementById('sheetDots');
+  dots.innerHTML = '';
+  cat.facts.forEach(function(_, i){
+    const d = document.createElement('i');
+    if(i === state.sheetFactIndex) d.className = 'on';
+    dots.appendChild(d);
+  });
+}
+function closeSheet(){
+  stopSpeaking();
+  document.getElementById('sheet').classList.remove('open');
+  document.getElementById('sheetBackdrop').classList.remove('open');
+}
+
+/* ============================================================
+   QUIZ
+   ============================================================ */
+function loadQuizQuestion(){
+  let next = Math.floor(Math.random() * QUIZ.length);
+  if(QUIZ.length > 1){
+    while(next === state.quizIndex){ next = Math.floor(Math.random() * QUIZ.length); }
+  }
+  state.quizIndex = next;
+  state.quizAnswered = false;
+  const q = QUIZ[state.quizIndex];
+  document.getElementById('quizQ').textContent = q.q;
+  document.getElementById('quizExplain').textContent = '';
+  const opts = document.getElementById('quizOpts');
+  opts.innerHTML = '';
+  q.opts.forEach(function(optText, i){
+    const b = document.createElement('button');
+    b.className = 'quiz-opt';
+    b.textContent = optText;
+    b.addEventListener('click', function(){ answerQuiz(i, b); });
+    opts.appendChild(b);
+  });
+}
+function answerQuiz(choiceIndex, btnEl){
+  if(state.quizAnswered) return;
+  state.quizAnswered = true;
+  const q = QUIZ[state.quizIndex];
+  const correct = choiceIndex === q.answer;
+  state.quizTotal++;
+  if(correct){ state.quizScore++; state.quizCorrectCount++; }
+  document.getElementById('quizScore').textContent = state.quizScore;
+  document.getElementById('quizTotal').textContent = state.quizTotal;
+  document.getElementById('quizExplain').textContent = q.explain;
+
+  const allOpts = document.querySelectorAll('#quizOpts .quiz-opt');
+  allOpts.forEach(function(el, i){
+    el.disabled = true;
+    if(i === q.answer) el.classList.add('correct');
+    else if(i === choiceIndex) el.classList.add('wrong');
+  });
+
+  addLog(correct ? 'Quiz answered correctly \u2713' : 'Quiz answered incorrectly \u2717');
+  sendToApp({ event:'quiz_answer', correct:correct });
+  if(correct){ soundCorrect(); showToast('Correct! \uD83C\uDF89'); }
+  else{ soundWrong(); showToast('Not quite \u2014 check the explanation'); }
+
+  if(state.quizCorrectCount >= 5) markStamp('quizmaster');
+}
+
+/* ============================================================
+   WORD OF THE DAY
+   ============================================================ */
+function showWord(index){
+  state.wordIndex = index;
+  const w = WORDS[index];
+  document.getElementById('wordMain').textContent = w.word;
+  document.getElementById('wordTranslit').textContent = w.translit;
+  document.getElementById('wordMeaning').textContent = w.meaning;
+
+  if(!state.wordsSeen[w.word]){
+    state.wordsSeen[w.word] = true;
+    const seenCount = Object.keys(state.wordsSeen).length;
+    document.getElementById('wordSeenCount').textContent = 'Words discovered: ' + seenCount;
+    if(seenCount >= 5) markStamp('wordsmith');
+  }
+}
+function nextWord(){
+  let next = Math.floor(Math.random() * WORDS.length);
+  if(WORDS.length > 1){ while(next === state.wordIndex){ next = Math.floor(Math.random() * WORDS.length); } }
+  soundTap();
+  showWord(next);
+}
+
+/* ============================================================
+   FESTIVAL COUNTDOWN
+   ============================================================ */
+function daysUntil(month, day){
+  const now = new Date();
+  let target = new Date(now.getFullYear(), month - 1, day);
+  if(target < now){ target = new Date(now.getFullYear() + 1, month - 1, day); }
+  return Math.ceil((target - now) / (1000*60*60*24));
+}
+function buildCountdown(){
+  const list = document.getElementById('countdownList');
+  list.innerHTML = '';
+  FESTIVALS_FIXED
+    .map(function(f){ return { f:f, days:daysUntil(f.month, f.day) }; })
+    .sort(function(a,b){ return a.days - b.days; })
+    .forEach(function(item){
+      const row = document.createElement('div');
+      row.className = 'countdown-item';
+      row.innerHTML =
+        '<div class="cd-emoji">' + item.f.emoji + '</div>' +
+        '<div class="cd-name">' + item.f.name + '</div>' +
+        '<div class="cd-days">' + item.days + ' days</div>';
+      list.appendChild(row);
+    });
+
+  const chipWrap = document.getElementById('variableFestChips');
+  chipWrap.innerHTML = '';
+  FESTIVALS_VARIABLE.forEach(function(name){
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = name;
+    chipWrap.appendChild(chip);
+  });
+}
+
+/* ============================================================
+   RESET (staff utility -- clears score/passport between visitors)
+   ============================================================ */
+function resetSessionState(){
+  stopSpeaking();
+  state.quizScore = 0;
+  state.quizTotal = 0;
+  state.quizCorrectCount = 0;
+  state.wordsSeen = {};
+  state.wheelSpinCount = 0;
+  state.passport = {};
+  document.getElementById('quizScore').textContent = '0';
+  document.getElementById('quizTotal').textContent = '0';
+  document.getElementById('wordSeenCount').textContent = 'Words discovered: 0';
+  document.querySelectorAll('.cat-card').forEach(function(c){ c.classList.remove('done'); });
+  buildPassport();
+  loadQuizQuestion();
+  showWord(0);
+  addLog('Session reset \u2014 quiz score and passport cleared');
+  showToast('Demo session reset');
+  sendToApp({ event:'session_reset' });
+}
+
+/* ============================================================
+   SETTINGS DRAWER
+   ============================================================ */
+function wireDrawer(){
+  const drawer = document.getElementById('drawer');
+  const backdrop = document.getElementById('drawerBackdrop');
+  function openDrawer(){
+    document.getElementById('inProject').value = CONFIG.projectName;
+    document.getElementById('inTeam').value = CONFIG.teamName;
+    document.getElementById('inThreshold').value = CONFIG.proximityThresholdCm;
+    drawer.classList.add('open'); backdrop.classList.add('open');
+  }
+  function closeDrawer(){ drawer.classList.remove('open'); backdrop.classList.remove('open'); }
+
+  document.getElementById('settingsBtn').addEventListener('click', openDrawer);
+  document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+  backdrop.addEventListener('click', closeDrawer);
+
+  document.querySelectorAll('.swatch-btn').forEach(function(sw){
+    sw.addEventListener('click', function(){
+      document.querySelectorAll('.swatch-btn').forEach(function(s){ s.classList.remove('active'); });
+      sw.classList.add('active');
+      CONFIG.accent = sw.dataset.color;
+    });
+  });
+  document.getElementById('themeDarkBtn').addEventListener('click', function(){
+    CONFIG.theme = 'dark'; this.classList.add('active');
+    document.getElementById('themeLightBtn').classList.remove('active');
+  });
+  document.getElementById('themeLightBtn').addEventListener('click', function(){
+    CONFIG.theme = 'light'; this.classList.add('active');
+    document.getElementById('themeDarkBtn').classList.remove('active');
+  });
+  document.getElementById('soundOnBtn').addEventListener('click', function(){
+    CONFIG.sound = true; this.classList.add('active');
+    document.getElementById('soundOffBtn').classList.remove('active');
+  });
+  document.getElementById('soundOffBtn').addEventListener('click', function(){
+    CONFIG.sound = false; this.classList.add('active');
+    document.getElementById('soundOnBtn').classList.remove('active');
+  });
+  document.getElementById('autoSpeakOnBtn').addEventListener('click', function(){
+    CONFIG.autoSpeak = true; this.classList.add('active');
+    document.getElementById('autoSpeakOffBtn').classList.remove('active');
+  });
+  document.getElementById('autoSpeakOffBtn').addEventListener('click', function(){
+    CONFIG.autoSpeak = false; this.classList.add('active');
+    document.getElementById('autoSpeakOnBtn').classList.remove('active');
+  });
+  document.getElementById('motionOnBtn').addEventListener('click', function(){
+    CONFIG.reduceMotion = false; this.classList.add('active');
+    document.getElementById('motionReduceBtn').classList.remove('active');
+  });
+  document.getElementById('motionReduceBtn').addEventListener('click', function(){
+    CONFIG.reduceMotion = true; this.classList.add('active');
+    document.getElementById('motionOnBtn').classList.remove('active');
+  });
+
+  document.getElementById('applyBtn').addEventListener('click', function(){
+    const proj = document.getElementById('inProject').value.trim();
+    const team = document.getElementById('inTeam').value.trim();
+    CONFIG.projectName = proj || CONFIG.projectName;
+    CONFIG.teamName = team || CONFIG.teamName;
+    const th = parseInt(document.getElementById('inThreshold').value, 10);
+    if(!isNaN(th) && th >= 5 && th <= 200) CONFIG.proximityThresholdCm = th;
+    renderConfigToDOM();
+    buildWheel();
+    addLog('Dashboard settings updated');
+    showToast('Settings applied');
+    closeDrawer();
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', function(){
+    resetSessionState();
+    closeDrawer();
+  });
+}
+
+/* ============================================================
+   GENERAL BUTTON WIRING
+   ============================================================ */
+function wireButtons(){
+  document.getElementById('simulateBtn').addEventListener('click', function(){
+    soundTap();
+    const fakeDistance = Math.round(Math.random() * (CONFIG.proximityThresholdCm - 8) + 8);
+    updateDistanceReadout(fakeDistance);
+  });
+  document.getElementById('camProxBtn').addEventListener('click', function(){
+    soundTap();
+    if(camActive){ disableCameraProximity(); } else { enableCameraProximity(); }
+  });
+  document.getElementById('camPreviewCheck').addEventListener('change', function(){
+    document.getElementById('camPreviewWrap').style.display = this.checked ? 'flex' : 'none';
+  });
+  document.getElementById('speakBtn').addEventListener('click', function(){
+    if(speaking()){ soundTap(); stopSpeaking(); return; }
+    soundTap();
+    const g = GREETINGS[Math.floor(Math.random()*GREETINGS.length)];
+    sendToApp({ event:'speak', text: g.text });
+    speakText(g.text, g.code);
+    showToast('Reading: "' + g.text + '"');
+    addLog('Read-aloud requested (' + g.lang + ')');
+  });
+
+  const ticker = document.getElementById('tickerCard');
+  ticker.addEventListener('click', function(){ soundTap(); showRandomTickerFact(); });
+  ticker.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); soundTap(); showRandomTickerFact(); }
+  });
+  document.getElementById('tickerSpeakBtn').addEventListener('click', function(e){
+    e.stopPropagation();
+    if(speaking()){ soundTap(); stopSpeaking(); return; }
+    soundTap();
+    speakText(document.getElementById('tickerText').textContent, 'en-IN');
+  });
+
+  const spinBtn = document.getElementById('wheelSpinBtn');
+  spinBtn.addEventListener('click', spinWheel);
+  spinBtn.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); spinWheel(); }
+  });
+
+  document.getElementById('quizNextBtn').addEventListener('click', function(){ soundTap(); loadQuizQuestion(); });
+
+  document.getElementById('wordNextBtn').addEventListener('click', nextWord);
+
+  document.getElementById('sheetClose').addEventListener('click', closeSheet);
+  document.getElementById('sheetBackdrop').addEventListener('click', closeSheet);
+  document.getElementById('sheetNextBtn').addEventListener('click', function(){
+    soundTap();
+    const cat = CULTURE[state.sheetCategoryIndex];
+    state.sheetFactIndex = (state.sheetFactIndex + 1) % cat.facts.length;
+    renderSheetFact();
+  });
+  document.getElementById('sheetSpeakBtn').addEventListener('click', function(){
+    if(speaking()){ soundTap(); stopSpeaking(); return; }
+    soundTap();
+    speakText(document.getElementById('sheetFact').textContent, 'en-IN');
+  });
+
+  document.getElementById('soundBtn').addEventListener('click', function(){
+    CONFIG.sound = !CONFIG.sound;
+    renderConfigToDOM();
+    if(CONFIG.sound) soundTap();
+  });
+}
+
+/* ============================================================
+   BRIDGE TO MIT APP INVENTOR
+   --------------------------------------------------------------
+   Blocks -> JS:
+     Set WebViewer1.WebViewString to JSON, e.g.:
+       {"distance_cm": 34}
+     This page polls it automatically and greets a visitor once the
+     distance drops below CONFIG.proximityThresholdCm. Optional fields:
+       "visitor_name": "Asha"   -> personalizes the greeting
+       "reset": true            -> clears quiz score + passport
+
+   JS -> Blocks:
+     Whenever something happens in the UI (a visitor is detected, a
+     quiz is answered, the robot should say something), this page
+     calls sendToApp({...}), which sets
+     window.AppInventor.setWebViewString(...). Poll WebViewer1.WebViewString
+     from a Clock timer in Blocks. Useful fields to react to:
+       event == "person_detected"  -> trigger a wave / LED animation
+       event == "speak"            -> feed payload.text into TextToSpeech1.Speak
+       event == "quiz_answer"      -> payload.correct is true/false
+       event == "wheel_spin"       -> payload.result is the category key
+       event == "stamp_collected"  -> payload.stamp is the stamp key
+       event == "passport_complete"-> the visitor filled the whole passport
+       event == "session_reset"    -> staff reset the demo session
+   ============================================================ */
+function sendToApp(payload){
+  try{
+    if(window.AppInventor && window.AppInventor.setWebViewString){
+      window.AppInventor.setWebViewString(JSON.stringify(payload));
+    }
+  }catch(e){ /* not running inside App Inventor -- ignore */ }
+}
+
+let lastWebViewString = '';
+function pollAppInventor(){
+  try{
+    if(window.AppInventor && window.AppInventor.getWebViewString){
+      const raw = window.AppInventor.getWebViewString();
+      if(raw && raw !== lastWebViewString){
+        lastWebViewString = raw;
+        const data = JSON.parse(raw);
+        if(data && typeof data === 'object'){
+          if(typeof data.visitor_name === 'string' && data.visitor_name.trim()){
+            state.pendingVisitorName = data.visitor_name.trim();
+          }
+          if(typeof data.distance_cm === 'number'){ updateDistanceReadout(data.distance_cm); }
+          if(data.reset === true){ resetSessionState(); }
+        }
+      }
+    }
+  }catch(e){ /* no bridge yet, or non-JSON string -- ignore */ }
+}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+function boot(){
+  renderConfigToDOM();
+  buildPassport();
+  buildCategoryGrid();
+  buildWheel();
+  loadQuizQuestion();
+  showWord(0);
+  buildCountdown();
+  showRandomTickerFact();
+  wireButtons();
+  wireDrawer();
+  addLog('Robo Sanskriti console ready. Waiting for the proximity sensor\u2026');
+
+  tickerTimer = setInterval(showRandomTickerFact, 12000);
+  setInterval(pollAppInventor, 500);
+}
+boot();
+</script>
+</body>
+</html>
